@@ -42,6 +42,11 @@ user_languages = {}
 all_users = set()
 temp_admin_data = {}
 
+def normalize_txid(raw_tx):
+    if not raw_tx:
+        return ""
+    return " ".join(str(raw_tx).split()).strip().lower()
+
 # ----------------- COUNTRY FLAG & CHINESE NAME HELPER -----------------
 COUNTRY_ZH_NAMES = {
     "afghanistan": "阿富汗", "albania": "阿尔巴尼亚", "algeria": "阿尔及利亚", "andorra": "安道尔",
@@ -335,9 +340,9 @@ def load_data_from_firebase():
 
     tx = fb_get("used_txids")
     if tx and isinstance(tx, list):
-        used_txids = set(tx)
+        used_txids = set(normalize_txid(x) for x in tx if normalize_txid(x))
     elif tx and isinstance(tx, dict):
-        used_txids = set(tx.keys())
+        used_txids = set(normalize_txid(k) for k in tx.keys() if normalize_txid(k))
 
     inv = fb_get("product_inventory")
     if inv and isinstance(inv, dict):
@@ -391,7 +396,7 @@ def remove_pending_deposit(dep_id):
     fb_delete(f"pending_deposits/{dep_id}")
 
 def save_used_txids():
-    fb_put("used_txids", list(used_txids))
+    fb_put("used_txids", sorted(list(used_txids)))
 
 print("Initializing & Loading data from Firebase...")
 load_data_from_firebase()
@@ -562,7 +567,13 @@ LANG = {
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "💎 <i>Your balance will be credited once verified.</i>"
         ),
-        "txid_used": "❌ This Order ID / TxID has already been used! Each ID can only be used once for a deposit.",
+        "txid_used": (
+            "╔══════════════════════╗\n"
+            "   🚫 <b>DUPLICATE TxID / ORDER ID</b>\n"
+            "╚══════════════════════╝\n\n"
+            "❌ <i>This Transaction ID (TxID) or Order ID has already been used!</i>\n"
+            "🔒 <i>Each TxID / Order ID can only be used once.</i>"
+        ),
         "country_detail": (
             "╔══════════════════════╗\n"
             "   {flag} <b>{name}</b> ({code})\n"
@@ -767,7 +778,13 @@ LANG = {
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "💎 <i>验证通过后余额将立即为您入账。</i>"
         ),
-        "txid_used": "❌ 此订单号 / TxID 已被使用！每个单号只能用于充值一次。",
+        "txid_used": (
+            "╔══════════════════════╗\n"
+            "   🚫 <b>重复的交易单号 / 订单号</b>\n"
+            "╚══════════════════════╝\n\n"
+            "❌ <i>此交易单号 (TxID) 或订单号已被使用！</i>\n"
+            "🔒 <i>每个单号仅限使用一次。</i>"
+        ),
         "country_detail": (
             "╔══════════════════════╗\n"
             "   {flag} <b>{name}</b> ({code})\n"
@@ -838,7 +855,6 @@ def get_lang(user_id):
     return user_languages.get(user_id, "en")
 
 def remove_old_reply_keyboard(chat_id):
-    """Removes the old bottom reply keyboard silently so there is no duplicate menu."""
     try:
         msg = bot.send_message(chat_id, "⏳", reply_markup=types.ReplyKeyboardRemove())
         bot.delete_message(chat_id, msg.message_id)
@@ -902,9 +918,6 @@ def get_main_menu_inline_back(user_id):
     return markup
 
 def send_colored_main_menu_back(chat_id, text, user_id):
-    """
-    Sends a premium HTML message with a colored '< Main Menu' button.
-    """
     t = LANG[get_lang(user_id)]
     inline_keyboard = [
         [{"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}]
@@ -928,9 +941,6 @@ def send_colored_main_menu_back(chat_id, text, user_id):
     bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=get_main_menu_inline_back(user_id))
 
 def send_colored_deposit_status(target_uid, text, accepted=True):
-    """
-    Sends a premium HTML Deposit Accepted / Rejected card with multi-color inline buttons.
-    """
     t = LANG[get_lang(target_uid)]
     if accepted:
         inline_keyboard = [
@@ -999,10 +1009,6 @@ def get_select_amount_keyboard(user_id):
     return markup
 
 def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
-    """
-    Sends or edits the Recharge Amount Selection screen with a premium HTML box
-    and multi-color inline buttons.
-    """
     t = LANG[get_lang(user_id)]
     text = t["deposit"]
 
@@ -1074,10 +1080,6 @@ def get_payment_methods_keyboard(user_id):
     return markup
 
 def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
-    """
-    Sends or edits the Payment Method Selection screen with a premium HTML box
-    and multi-color inline buttons.
-    """
     t = LANG[get_lang(user_id)]
     text = t["selected_amount_pay"].format(amount=amount)
 
@@ -1136,10 +1138,6 @@ def get_order_created_keyboard(net_code, order_id, user_id):
     return markup
 
 def send_colored_order_created(chat_id, user_id, order_text, order_id, message_id=None):
-    """
-    Sends or edits the Order Created invoice with a premium HTML box
-    and multi-color inline buttons.
-    """
     t = LANG[get_lang(user_id)]
     inline_keyboard = [
         [{"text": t["send_txid_btn"], "callback_data": f"send_order_id_{order_id}", "style": "success"}],
@@ -1202,10 +1200,6 @@ def get_quantity_keyboard(item_key, user_id):
     return markup
 
 def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
-    """
-    Sends or edits the Quantity Selection screen with a premium HTML box
-    and multi-color inline buttons.
-    """
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     c_data = product_inventory["Countries"]["items"].get(country, {})
@@ -1288,10 +1282,6 @@ def get_account_keyboard(user_id):
     return markup
 
 def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
-    """
-    Sends or edits the Personal Center card with a premium HTML box
-    and multi-color inline action buttons.
-    """
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     no_user_str = "无" if lang_code == "zh" else "N/A"
@@ -1362,10 +1352,6 @@ def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
     bot.send_message(chat_id, account_text, parse_mode="HTML", reply_markup=markup)
 
 def send_colored_rules_menu(chat_id, user_id, message_id=None):
-    """
-    Sends or edits the Rules & Precautions card with a premium HTML box
-    and multi-color inline buttons.
-    """
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     rules_msg = t["rules"].format(support_user=support_admin_username)
@@ -1426,9 +1412,6 @@ def send_colored_rules_menu(chat_id, user_id, message_id=None):
     bot.send_message(chat_id, rules_msg, parse_mode="HTML", reply_markup=markup)
 
 def send_colored_insufficient_stock(chat_id, user_id, stock_count):
-    """
-    Sends a premium HTML Insufficient Stock card with multi-color inline action buttons.
-    """
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     msg_text = t["insufficient_stock"].format(stock=stock_count)
@@ -1487,10 +1470,6 @@ def get_products_countries_keyboard(user_id):
     return markup
 
 def send_colored_countries_menu(chat_id, user_id, message_id=None):
-    """
-    Sends or edits the Country List with rotating vibrant colors (Blue, Green, Red/Coral)
-    and a premium storefront layout.
-    """
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     header_text = t["products"]
@@ -1950,13 +1929,13 @@ def handle_all_messages(message):
     # 3. User Input States
     if state.startswith("waiting_for_txid_"):
         order_id = state.replace("waiting_for_txid_", "")
-        trx_text_clean = text.strip() if text else ""
+        trx_text_clean = normalize_txid(text) if text else ""
 
         if trx_text_clean:
-            if trx_text_clean.lower() in used_txids:
-                bot.send_message(message.chat.id, t["txid_used"])
+            if trx_text_clean in used_txids:
+                bot.send_message(message.chat.id, t["txid_used"], parse_mode="HTML")
                 return
-            used_txids.add(trx_text_clean.lower())
+            used_txids.add(trx_text_clean)
             save_used_txids()
 
         user_states.pop(user_id, None)
@@ -2246,9 +2225,9 @@ def handle_inline_clicks(call):
                 except Exception:
                     pass
             else:
-                txid_val = dep_info.get("txid", "")
-                if txid_val and txid_val.lower() in used_txids:
-                    used_txids.remove(txid_val.lower())
+                txid_val = normalize_txid(dep_info.get("txid", ""))
+                if txid_val and txid_val in used_txids:
+                    used_txids.remove(txid_val)
                     save_used_txids()
 
                 bot.answer_callback_query(call.id, "Deposit Rejected!", show_alert=True)
