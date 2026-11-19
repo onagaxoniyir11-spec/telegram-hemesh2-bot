@@ -21,7 +21,6 @@ if not TOKEN:
 if not FIREBASE_URL:
     raise ValueError("FIREBASE_URL environment variable is missing!")
 
-# Remove trailing slash from FIREBASE_URL if present
 FIREBASE_URL = FIREBASE_URL.rstrip("/")
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
@@ -174,7 +173,6 @@ COUNTRY_FLAGS_BY_CODE = {
 }
 
 def strip_leading_flag(text):
-    """Removes any leading flag emoji from country name to prevent duplicate flags."""
     s = str(text).strip()
     if len(s) >= 2 and 0x1F1E6 <= ord(s[0]) <= 0x1F1FF and 0x1F1E6 <= ord(s[1]) <= 0x1F1FF:
         return s[2:].strip()
@@ -230,7 +228,6 @@ def webhook():
     return '', 403
 # --------------------------------------------------------------------------
 
-# Country Database (Default fallback if Firebase is empty)
 DEFAULT_DATABASE = {
     "support_admin": "@proxyvpnservice17",
     "product_inventory": {
@@ -563,14 +560,16 @@ LANG = {
 def get_lang(user_id):
     return user_languages.get(user_id, "en")
 
+def remove_old_reply_keyboard(chat_id):
+    """Removes the old bottom reply keyboard silently so there is no duplicate menu."""
+    try:
+        msg = bot.send_message(chat_id, "⏳", reply_markup=types.ReplyKeyboardRemove())
+        bot.delete_message(chat_id, msg.message_id)
+    except Exception:
+        pass
+
 def send_colored_main_menu(chat_id, text, user_id):
-    """
-    Sends the Main Menu with colored Inline Keyboard Buttons matching the screenshot:
-    Row 1: Products (Blue/primary) | Recharge (Green/success)
-    Row 2: Contact Customer Service (Red/danger) | Personal Center (Blue/primary)
-    Row 3: Language (Green/success) | Rules (Red/danger)
-    Row 4 (Admin only): Admin Panel
-    """
+    remove_old_reply_keyboard(chat_id)
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
 
@@ -606,7 +605,6 @@ def send_colored_main_menu(chat_id, text, user_id):
     except Exception as e:
         print(f"Colored menu send warning: {e}")
 
-    # Fallback if Telegram rejects style parameter on older clients
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products"),
@@ -620,20 +618,10 @@ def send_colored_main_menu(chat_id, text, user_id):
         markup.add(types.InlineKeyboardButton(t["menu_admin"], callback_data="menu_admin"))
     bot.send_message(chat_id, text, reply_markup=markup)
 
-def get_main_menu_keyboard(user_id):
-    lang_code = get_lang(user_id)
-    t = LANG[lang_code]
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(
-        types.KeyboardButton(t["menu_products"]),
-        types.KeyboardButton(t["menu_deposit"]),
-        types.KeyboardButton(t["menu_support"]),
-        types.KeyboardButton(t["menu_account"]),
-        types.KeyboardButton(t["menu_lang"]),
-        types.KeyboardButton(t["menu_rules"])
-    )
-    if is_admin(user_id):
-        markup.add(types.KeyboardButton(t["menu_admin"]))
+def get_main_menu_inline_back(user_id):
+    t = LANG[get_lang(user_id)]
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
 
 def get_select_amount_keyboard(user_id):
@@ -823,7 +811,7 @@ def cancel_operation(message):
     user_id = message.from_user.id
     user_states.pop(user_id, None)
     t = LANG[get_lang(user_id)]
-    bot.send_message(message.chat.id, t["cancel_op"], reply_markup=get_main_menu_keyboard(user_id))
+    bot.send_message(message.chat.id, t["cancel_op"], reply_markup=get_main_menu_inline_back(user_id))
 
 @bot.message_handler(content_types=['document'])
 def handle_document_uploads(message):
@@ -854,30 +842,21 @@ def handle_all_messages(message):
     t = LANG[lang_code]
     text = message.text if message.text else ""
 
-    # 1. Check Main Menu Buttons FIRST
-    is_products = text in [LANG["en"]["menu_products"], LANG["zh"]["menu_products"]]
+    # 1. If user clicks any leftover old ReplyKeyboard button, clean it up and open the requested page
+    is_products = text in [LANG["en"]["menu_products"], LANG["zh"]["menu_products"], "🛍️ Products", "🛍️ 产品中心"]
     is_account = text in [LANG["en"]["menu_account"], LANG["zh"]["menu_account"]]
-    is_deposit = text in [LANG["en"]["menu_deposit"], LANG["zh"]["menu_deposit"]]
-    is_support = text in [LANG["en"]["menu_support"], LANG["zh"]["menu_support"]]
+    is_deposit = text in [LANG["en"]["menu_deposit"], LANG["zh"]["menu_deposit"], "💰 Recharge", "💰 账户充值"]
+    is_support = text in [LANG["en"]["menu_support"], LANG["zh"]["menu_support"], "💬 Contact Customer Service", "💬 联系客服"]
     is_lang = text in [LANG["en"]["menu_lang"], LANG["zh"]["menu_lang"]]
     is_rules = text in [LANG["en"]["menu_rules"], LANG["zh"]["menu_rules"]]
     is_admin_menu = text in [LANG["en"]["menu_admin"], LANG["zh"]["menu_admin"]]
 
     if any([is_products, is_account, is_deposit, is_support, is_lang, is_rules, is_admin_menu]):
         user_states.pop(user_id, None)
+        remove_old_reply_keyboard(message.chat.id)
 
         if is_lang:
-            current_lang = user_languages.get(user_id, "en")
-            if current_lang == "en":
-                user_languages[user_id] = "zh"
-                new_lang_name = "中文"
-            else:
-                user_languages[user_id] = "en"
-                new_lang_name = "English"
-            save_user_data(user_id)
-            new_lang_code = get_lang(user_id)
-            success_msg = f"🌐 Language successfully switched to: {new_lang_name}" if new_lang_code == "en" else f"🌐 语言已成功切换为：{new_lang_name}"
-            send_colored_main_menu(message.chat.id, success_msg, user_id)
+            bot.send_message(message.chat.id, t["language"], reply_markup=get_language_keyboard(user_id))
             return
         elif is_admin_menu:
             if not is_admin(user_id):
@@ -1072,7 +1051,7 @@ def handle_all_messages(message):
                 success_count += 1
             except Exception:
                 fail_count += 1
-        bot.send_message(message.chat.id, f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users", reply_markup=get_main_menu_keyboard(user_id))
+        bot.send_message(message.chat.id, f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users", reply_markup=get_main_menu_inline_back(user_id))
         return
 
     if state == "waiting_for_zip_2fa" and is_admin(user_id):
@@ -1162,7 +1141,7 @@ def handle_all_messages(message):
         except Exception as e:
             print(f"Failed to send proof to admin: {e}")
 
-        bot.send_message(message.chat.id, t["proof_sent"], reply_markup=get_main_menu_keyboard(user_id))
+        bot.send_message(message.chat.id, t["proof_sent"], reply_markup=get_main_menu_inline_back(user_id))
         return
 
     if state.startswith("waiting_for_custom_qty_"):
@@ -1208,7 +1187,7 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
     zip_total_files = sum(len(zf.get("extracted_files", [])) for zf in zip_list)
     total_stock = len(accounts_list) + zip_total_files
     if total_stock < qty:
-        bot.send_message(chat_id, t["insufficient_stock"].format(stock=total_stock), reply_markup=get_main_menu_keyboard(user_id))
+        bot.send_message(chat_id, t["insufficient_stock"].format(stock=total_stock), reply_markup=get_main_menu_inline_back(user_id))
         return
 
     total_price = round(price_per_unit * qty, 2)
@@ -1217,7 +1196,7 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
         bot.send_message(
             chat_id,
             t["insufficient_balance"].format(required=total_price, balance=user_balance),
-            reply_markup=get_main_menu_keyboard(user_id)
+            reply_markup=get_main_menu_inline_back(user_id)
         )
         return
 
