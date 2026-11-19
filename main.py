@@ -431,7 +431,7 @@ LANG = {
             "• 🔗 USDT (BEP20)\n\n"
             "After selecting your recharge amount, choose your preferred payment method to continue."
         ),
-        "support": "📞 Contact Customer Service\n\nFor any help, issues or assistance, please contact our customer service admin:\n👉 {support_user}",
+        "support": "👉 {support_user}",
         "rules": (
             "⚠️ Platform Rules & Notice\n"
             "────────────────────────\n"
@@ -518,7 +518,7 @@ LANG = {
             "• 🔗 USDT (BEP20)\n\n"
             "选择充值金额后，请选择您的首选支付方式继续。"
         ),
-        "support": "📞 联系客服\n\n如有任何帮助、问题或协助，请直接联系我们的客服管理员：\n👉 {support_user}",
+        "support": "👉 {support_user}",
         "rules": (
             "⚠️ 平台规则与须知\n"
             "────────────────────────\n"
