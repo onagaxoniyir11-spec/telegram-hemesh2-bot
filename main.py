@@ -450,7 +450,17 @@ LANG = {
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "🌍 Select a country below to view details & purchase:"
         ),
-        "account": "◆ PERSONAL CENTER / ACCOUNT\n────────────────────────\nUser ID: {user_id}\nUsername: {username}\nBalance: ${balance:.2f}\nPurchased: {purchased_total}",
+        "account": (
+            "╔══════════════════════╗\n"
+            "   👤 <b>PERSONAL CENTER</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🆔 <b>User ID:</b> <code>{user_id}</code>\n"
+            "👤 <b>Username:</b> {username}\n"
+            "💰 <b>Balance:</b> <code>${balance:.2f}</code>\n"
+            "📦 <b>Purchased:</b> <code>{purchased_total}</code> pcs\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>Manage your balance & orders below:</i>"
+        ),
         "deposit": (
             "💰 Please select your recharge amount below.\n\n"
             "✅ Please make sure to pay the exact amount shown on your invoice.\n\n"
@@ -571,7 +581,17 @@ LANG = {
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "🌍 请点击下方国家查看详情并购买："
         ),
-        "account": "◆ 个人中心 / 账户信息\n────────────────────────\n用户 ID: {user_id}\n用户名: {username}\n余额: ${balance:.2f}\n已购总额: {purchased_total}",
+        "account": (
+            "╔══════════════════════╗\n"
+            "   👤 <b>个人中心 / 账户详情</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🆔 <b>用户 ID:</b> <code>{user_id}</code>\n"
+            "👤 <b>用户名:</b> {username}\n"
+            "💰 <b>当前余额:</b> <code>${balance:.2f}</code>\n"
+            "📦 <b>已购数量:</b> <code>{purchased_total}</code> 件\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>在下方管理您的账户余额与订单：</i>"
+        ),
         "deposit": (
             "💰 请在下方选择您的充值金额。\n\n"
             "✅ 请务必支付订单上显示的准确金额。\n\n"
@@ -787,6 +807,80 @@ def get_account_keyboard(user_id):
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
 
+def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
+    """
+    Sends or edits the Personal Center card with a premium HTML box
+    and multi-color inline action buttons.
+    """
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    no_user_str = "无" if lang_code == "zh" else "N/A"
+    username = f"@{user_obj.username}" if getattr(user_obj, "username", None) else no_user_str
+    balance_val = user_balances.get(user_id, 0.00)
+    purchased_total = len(user_purchases.get(user_id, []))
+
+    account_text = t["account"].format(
+        user_id=user_id,
+        username=username,
+        balance=balance_val,
+        purchased_total=purchased_total
+    )
+
+    inline_keyboard = [
+        [
+            {"text": t["menu_deposit"], "callback_data": "menu_deposit", "style": "success"},
+            {"text": t["menu_products"], "callback_data": "menu_products", "style": "danger"}
+        ],
+        [
+            {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+        ]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": account_text,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup_json
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": account_text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored account menu warning: {e}")
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton(t["menu_deposit"], callback_data="menu_deposit"),
+        types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products")
+    )
+    markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
+    if message_id:
+        try:
+            bot.edit_message_text(account_text, chat_id, message_id, parse_mode="HTML", reply_markup=markup)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, account_text, parse_mode="HTML", reply_markup=markup)
+
 def get_products_countries_keyboard(user_id):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
@@ -861,7 +955,6 @@ def send_colored_countries_menu(chat_id, user_id, message_id=None):
     except Exception as e:
         print(f"Colored countries menu warning: {e}")
 
-    # Fallback to standard inline keyboard if style parameter is unsupported
     fallback_markup = get_products_countries_keyboard(user_id)
     if message_id:
         try:
@@ -1054,13 +1147,7 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, t["deposit"], reply_markup=get_select_amount_keyboard(user_id))
             return
         elif is_account:
-            user = message.from_user
-            no_user_str = "无" if lang_code == "zh" else "N/A"
-            username = f"@{user.username}" if user.username else no_user_str
-            balance_val = user_balances.get(user_id, 0.00)
-            purchased_total = len(user_purchases.get(user_id, []))
-            account_text = t["account"].format(user_id=user.id, username=username, balance=balance_val, purchased_total=purchased_total)
-            bot.send_message(message.chat.id, account_text, reply_markup=get_account_keyboard(user_id))
+            send_colored_account_menu(message.chat.id, message.from_user, user_id)
             return
         elif is_support:
             support_msg = t["support"].format(support_user=support_admin_username)
@@ -1495,16 +1582,7 @@ def handle_inline_clicks(call):
 
     if call.data == "menu_account":
         bot.answer_callback_query(call.id)
-        user = call.from_user
-        no_user_str = "无" if lang_code == "zh" else "N/A"
-        username = f"@{user.username}" if user.username else no_user_str
-        balance_val = user_balances.get(user_id, 0.00)
-        purchased_total = len(user_purchases.get(user_id, []))
-        account_text = t["account"].format(user_id=user.id, username=username, balance=balance_val, purchased_total=purchased_total)
-        try:
-            bot.edit_message_text(account_text, call.message.chat.id, call.message.message_id, reply_markup=get_account_keyboard(user_id))
-        except Exception:
-            bot.send_message(call.message.chat.id, account_text, reply_markup=get_account_keyboard(user_id))
+        send_colored_account_menu(call.message.chat.id, call.from_user, user_id, call.message.message_id)
         return
 
     if call.data == "menu_lang":
@@ -1779,16 +1857,7 @@ def handle_inline_clicks(call):
 
     if call.data == "back_to_account":
         bot.answer_callback_query(call.id)
-        user = call.from_user
-        no_user_str = "无" if lang_code == "zh" else "N/A"
-        username = f"@{user.username}" if user.username else no_user_str
-        balance_val = user_balances.get(user_id, 0.00)
-        purchased_total = len(user_purchases.get(user_id, []))
-        account_text = t["account"].format(user_id=user.id, username=username, balance=balance_val, purchased_total=purchased_total)
-        try:
-            bot.edit_message_text(account_text, call.message.chat.id, call.message.message_id, reply_markup=get_account_keyboard(user_id))
-        except Exception:
-            pass
+        send_colored_account_menu(call.message.chat.id, call.from_user, user_id, call.message.message_id)
         return
 
     if call.data.startswith("qty_other_"):
@@ -1829,7 +1898,6 @@ def handle_inline_clicks(call):
             price=price,
             stock=stock_count
         )
-        # Colored detail action buttons
         detail_kb = [
             [{"text": t["select_qty_btn"], "callback_data": f"buy_country_{country}", "style": "success"}],
             [{"text": t["back"], "callback_data": "back_to_products_menu", "style": "primary"}]
