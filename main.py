@@ -471,17 +471,23 @@ LANG = {
         ),
         "support": "👉 {support_user}",
         "rules": (
-            "⚠️ Platform Rules & Notice\n"
-            "────────────────────────\n"
-            "1. All digital products are checked before delivery.\n"
-            "2. Please verify your account immediately after purchase.\n"
-            "3. Deposits are non-refundable once credited to your balance.\n"
-            "4. Always send the exact USDT amount on the selected network.\n"
-            "5. For any issues, contact customer service: {support_user}\n\n"
-            "Precautions\n"
-            "• Only lawful digital items.\n"
-            "• Obey local laws & platform terms.\n"
-            "• Download zip immediately."
+            "╔══════════════════════╗\n"
+            "   ⚠️ <b>PLATFORM RULES &amp; NOTICE</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📌 <b>Terms &amp; Guidelines</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1️⃣ <b>Quality Checked:</b> All digital products are verified before delivery.\n"
+            "2️⃣ <b>Instant Check:</b> Please verify your account immediately after purchase.\n"
+            "3️⃣ <b>No Refunds:</b> Deposits are non-refundable once credited to your balance.\n"
+            "4️⃣ <b>Exact Payment:</b> Always send the exact USDT amount on the selected network.\n"
+            "5️⃣ <b>24/7 Support:</b> For any issues, contact {support_user}\n\n"
+            "🛡️ <b>PRECAUTIONS</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔸 <i>Only lawful digital items.</i>\n"
+            "🔸 <i>Obey local laws &amp; platform terms.</i>\n"
+            "🔸 <i>Download zip immediately after purchase.</i>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>Thank you for following our community rules!</i>"
         ),
         "language": "🌐 Language Settings\n\nPlease click the button below to switch language:",
         "admin": "🛠️ Welcome to Admin Panel\n\nChoose an option below:",
@@ -602,17 +608,23 @@ LANG = {
         ),
         "support": "👉 {support_user}",
         "rules": (
-            "⚠️ 平台规则与须知\n"
-            "────────────────────────\n"
-            "1. 所有数字商品在发货前均经过严格检测。\n"
-            "2. 购买后请立即检查并验证您的账户。\n"
-            "3. 充值金额一旦入账至您的余额，恕不退款。\n"
-            "4. 请务必在所选网络上转账准确的 USDT 金额。\n"
-            "5. 如有任何问题，请联系客服：{support_user}\n\n"
-            "注意事项 (Precautions)\n"
-            "• 仅限合法数字商品。\n"
-            "• 遵守当地法律及平台条款。\n"
-            "• 购买后请立即下载压缩包 (ZIP)。"
+            "╔══════════════════════╗\n"
+            "   ⚠️ <b>平台规则与使用须知</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📌 <b>服务条款与规范</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1️⃣ <b>严格检测：</b> 所有数字商品在发货前均经过严格检测。\n"
+            "2️⃣ <b>及时验证：</b> 购买后请立即检查并验证您的账户。\n"
+            "3️⃣ <b>充值说明：</b> 充值金额一旦入账至您的余额，恕不退款。\n"
+            "4️⃣ <b>准确转账：</b> 请务必在所选网络上转账准确的 USDT 金额。\n"
+            "5️⃣ <b>全天客服：</b> 如有任何问题，请联系 {support_user}\n\n"
+            "🛡️ <b>注意事项 (PRECAUTIONS)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔸 <i>仅限合法数字商品。</i>\n"
+            "🔸 <i>遵守当地法律及平台条款。</i>\n"
+            "🔸 <i>购买后请立即下载压缩包 (ZIP)。</i>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>感谢您遵守平台使用规范！</i>"
         ),
         "language": "🌐 语言设置\n\n请点击下方按钮切换语言：",
         "admin": "🛠️ 欢迎来到管理面板\n\n在下方选择一个选项：",
@@ -880,6 +892,70 @@ def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
         except Exception:
             pass
     bot.send_message(chat_id, account_text, parse_mode="HTML", reply_markup=markup)
+
+def send_colored_rules_menu(chat_id, user_id, message_id=None):
+    """
+    Sends or edits the Rules & Precautions card with a premium HTML box
+    and multi-color inline buttons.
+    """
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    rules_msg = t["rules"].format(support_user=support_admin_username)
+
+    inline_keyboard = [
+        [
+            {"text": t["menu_support"], "callback_data": "menu_support", "style": "danger"},
+            {"text": t["menu_products"], "callback_data": "menu_products", "style": "success"}
+        ],
+        [
+            {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+        ]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": rules_msg,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup_json
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": rules_msg,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored rules menu warning: {e}")
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton(t["menu_support"], callback_data="menu_support"),
+        types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products")
+    )
+    markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
+    if message_id:
+        try:
+            bot.edit_message_text(rules_msg, chat_id, message_id, parse_mode="HTML", reply_markup=markup)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, rules_msg, parse_mode="HTML", reply_markup=markup)
 
 def get_products_countries_keyboard(user_id):
     lang_code = get_lang(user_id)
@@ -1154,8 +1230,7 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, support_msg, reply_markup=get_account_keyboard(user_id))
             return
         elif is_rules:
-            rules_msg = t["rules"].format(support_user=support_admin_username)
-            bot.send_message(message.chat.id, rules_msg, reply_markup=get_account_keyboard(user_id))
+            send_colored_rules_menu(message.chat.id, user_id)
             return
 
     # 2. Admin-only states
@@ -1595,11 +1670,7 @@ def handle_inline_clicks(call):
 
     if call.data == "menu_rules":
         bot.answer_callback_query(call.id)
-        rules_msg = t["rules"].format(support_user=support_admin_username)
-        try:
-            bot.edit_message_text(rules_msg, call.message.chat.id, call.message.message_id, reply_markup=get_account_keyboard(user_id))
-        except Exception:
-            bot.send_message(call.message.chat.id, rules_msg, reply_markup=get_account_keyboard(user_id))
+        send_colored_rules_menu(call.message.chat.id, user_id, call.message.message_id)
         return
 
     if call.data == "menu_admin":
