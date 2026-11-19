@@ -593,8 +593,24 @@ LANG = {
         "deliver_acc_text": "✅ Purchase Successful!\n\n{flag} Country: {name}\n📱 Telegram Number: {num}\n🔐 2FA Code: {tfa}\n💵 Paid: ${price:.2f}\n\nRemaining Balance: ${balance:.2f}",
         "deliver_err": "❌ Error delivering item: {err}",
         "cancel_op": "❌ Current operation cancelled.",
-        "dep_accepted_user": "✅ Your deposit has been accepted successfully!\n\n💰 ${amount:.2f} has been credited to your account.",
-        "dep_rejected_user": "❌ Sorry, your deposit request has been rejected by admin.\nOrder ID: {order_id}",
+        "dep_accepted_user": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>DEPOSIT ACCEPTED</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💰 <b>Credited:</b> <code>+${amount:.2f} USDT</code>\n"
+            "💳 <b>New Balance:</b> <code>${new_balance:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎉 <i>Your deposit has been verified and credited to your account!</i>"
+        ),
+        "dep_rejected_user": (
+            "╔══════════════════════╗\n"
+            "   ❌ <b>DEPOSIT REJECTED</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📦 <b>Order ID:</b> <code>{order_id}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "😔 <i>Sorry, your deposit request was rejected by admin.</i>\n"
+            "💡 <i>Please contact support if you need assistance.</i>"
+        ),
         "order_box": (
             "╔══════════════════════╗\n"
             "   🧾 <b>ORDER CREATED</b> • {currency}\n"
@@ -782,8 +798,24 @@ LANG = {
         "deliver_acc_text": "✅ 购买成功！\n\n{flag} 国家：{name}\n📱 电报号码：{num}\n🔐 二次验证码：{tfa}\n💵 实付金额：${price:.2f}\n\n剩余余额：${balance:.2f}",
         "deliver_err": "❌ 发货时出错：{err}",
         "cancel_op": "❌ 当前操作已取消。",
-        "dep_accepted_user": "✅ 您的充值申请已审核通过！\n\n💰 ${amount:.2f} 已成功入账到您的账户。",
-        "dep_rejected_user": "❌ 抱歉，您的充值申请已被管理员拒绝。\n订单号：{order_id}",
+        "dep_accepted_user": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>充值已通过</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💰 <b>到账金额：</b> <code>+${amount:.2f} USDT</code>\n"
+            "💳 <b>当前余额：</b> <code>${new_balance:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎉 <i>您的充值已审核通过并入账到您的账户！</i>"
+        ),
+        "dep_rejected_user": (
+            "╔══════════════════════╗\n"
+            "   ❌ <b>充值已拒绝</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📦 <b>订单编号：</b> <code>{order_id}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "😔 <i>抱歉，您的充值申请已被管理员拒绝。</i>\n"
+            "💡 <i>如需帮助，请联系客服。</i>"
+        ),
         "order_box": (
             "╔══════════════════════╗\n"
             "   🧾 <b>订单已创建</b> • {currency}\n"
@@ -894,6 +926,62 @@ def send_colored_main_menu_back(chat_id, text, user_id):
         print(f"Colored back menu warning: {e}")
 
     bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=get_main_menu_inline_back(user_id))
+
+def send_colored_deposit_status(target_uid, text, accepted=True):
+    """
+    Sends a premium HTML Deposit Accepted / Rejected card with multi-color inline buttons.
+    """
+    t = LANG[get_lang(target_uid)]
+    if accepted:
+        inline_keyboard = [
+            [
+                {"text": t["menu_products"], "callback_data": "menu_products", "style": "success"},
+                {"text": t["menu_account"], "callback_data": "menu_account", "style": "danger"}
+            ],
+            [
+                {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+            ]
+        ]
+    else:
+        inline_keyboard = [
+            [
+                {"text": t["menu_support"], "callback_data": "menu_support", "style": "danger"},
+                {"text": t["menu_deposit"], "callback_data": "menu_deposit", "style": "success"}
+            ],
+            [
+                {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+            ]
+        ]
+
+    try:
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": target_uid,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored deposit status warning: {e}")
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    if accepted:
+        markup.add(
+            types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products"),
+            types.InlineKeyboardButton(t["menu_account"], callback_data="menu_account")
+        )
+    else:
+        markup.add(
+            types.InlineKeyboardButton(t["menu_support"], callback_data="menu_support"),
+            types.InlineKeyboardButton(t["menu_deposit"], callback_data="menu_deposit")
+        )
+    markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
+    bot.send_message(target_uid, text, parse_mode="HTML", reply_markup=markup)
 
 def get_select_amount_keyboard(user_id):
     t = LANG[get_lang(user_id)]
@@ -2153,7 +2241,8 @@ def handle_inline_clicks(call):
                 except Exception:
                     pass
                 try:
-                    bot.send_message(target_uid, target_t["dep_accepted_user"].format(amount=amount))
+                    accepted_msg = target_t["dep_accepted_user"].format(amount=amount, new_balance=new_bal)
+                    send_colored_deposit_status(target_uid, accepted_msg, accepted=True)
                 except Exception:
                     pass
             else:
@@ -2168,7 +2257,8 @@ def handle_inline_clicks(call):
                 except Exception:
                     pass
                 try:
-                    bot.send_message(target_uid, target_t["dep_rejected_user"].format(order_id=order_id))
+                    rejected_msg = target_t["dep_rejected_user"].format(order_id=order_id)
+                    send_colored_deposit_status(target_uid, rejected_msg, accepted=False)
                 except Exception:
                     pass
         else:
