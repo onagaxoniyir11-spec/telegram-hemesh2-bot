@@ -503,7 +503,7 @@ LANG = {
         "back": "< Back",
         "main_menu": "< Main Menu",
         "other_amt": "Other Amount",
-        "other_qty": "Other Quantity",
+        "other_qty": "✏️ Other Quantity",
         "cancel": "< Cancel",
         "stock": "Stock",
         "price": "Price",
@@ -533,7 +533,17 @@ LANG = {
             "👇 Click below to select quantity:"
         ),
         "select_qty_btn": "🛒 Select Quantity",
-        "qty_header": "🔢 Select Quantity for {flag} {name}:\n\nChoose how many items you want to buy:",
+        "qty_header": (
+            "╔══════════════════════╗\n"
+            "   🔢 <b>SELECT QUANTITY</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🌍 <b>Country:</b> {flag} <b>{name}</b>\n"
+            "💰 <b>Unit Price:</b> <code>${price:.2f}</code>\n"
+            "📦 <b>Available Stock:</b> <code>{stock}</code> pcs\n"
+            "💳 <b>Your Balance:</b> <code>${balance:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>Choose how many items you want to buy:</i>"
+        ),
         "enter_custom_qty": "🔢 Please enter the quantity you want to buy (e.g., 4, 15):",
         "invalid_qty_zero": "❌ Please enter a valid quantity greater than 0:",
         "invalid_qty_num": "❌ Invalid number! Please enter a valid integer (e.g., 2, 5):",
@@ -640,7 +650,7 @@ LANG = {
         "back": "< 返回",
         "main_menu": "< 主菜单",
         "other_amt": "其他金额",
-        "other_qty": "其他数量",
+        "other_qty": "✏️ 其他数量",
         "cancel": "< 取消",
         "stock": "库存",
         "price": "价格",
@@ -670,7 +680,17 @@ LANG = {
             "👇 请点击下方按钮选择购买数量："
         ),
         "select_qty_btn": "🛒 选择数量",
-        "qty_header": "🔢 选择 {flag} {name} 的购买数量：\n\n请选择您要购买的数量：",
+        "qty_header": (
+            "╔══════════════════════╗\n"
+            "   🔢 <b>选择购买数量</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🌍 <b>国家：</b> {flag} <b>{name}</b>\n"
+            "💰 <b>单价：</b> <code>${price:.2f}</code>\n"
+            "📦 <b>可用库存：</b> <code>{stock}</code> 件\n"
+            "💳 <b>当前余额：</b> <code>${balance:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>请选择您要购买的数量：</i>"
+        ),
         "enter_custom_qty": "🔢 请输入您要购买的数量（例如：4、15）：",
         "invalid_qty_zero": "❌ 请输入大于 0 的有效数量：",
         "invalid_qty_num": "❌ 数字无效！请输入有效的整数（例如：2、5）：",
@@ -811,6 +831,85 @@ def get_quantity_keyboard(item_key, user_id):
         types.InlineKeyboardButton(t["back"], callback_data="back_to_products_menu")
     )
     return markup
+
+def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
+    """
+    Sends or edits the Quantity Selection screen with a premium HTML box
+    and multi-color inline buttons.
+    """
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    c_data = product_inventory["Countries"]["items"].get(country, {})
+    flag = get_country_flag(country, c_data.get("code", ""))
+    clean_name = format_country_display_name(country, c_data.get("names", {}).get(lang_code, country), lang_code)
+    price = c_data.get("price", 1.00)
+    zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in c_data.get("zip_files", []))
+    stock_count = len(c_data.get("accounts", [])) + zip_stock_count
+    balance_val = user_balances.get(user_id, 0.00)
+
+    qty_text = t["qty_header"].format(
+        flag=flag,
+        name=clean_name,
+        price=price,
+        stock=stock_count,
+        balance=balance_val
+    )
+
+    inline_keyboard = [
+        [
+            {"text": "1", "callback_data": f"qty_{country}_1", "style": "success"},
+            {"text": "2", "callback_data": f"qty_{country}_2", "style": "primary"},
+            {"text": "3", "callback_data": f"qty_{country}_3", "style": "success"}
+        ],
+        [
+            {"text": "5", "callback_data": f"qty_{country}_5", "style": "primary"},
+            {"text": "10", "callback_data": f"qty_{country}_10", "style": "success"},
+            {"text": t["other_qty"], "callback_data": f"qty_other_{country}", "style": "danger"}
+        ],
+        [
+            {"text": t["back"], "callback_data": "back_to_products_menu", "style": "primary"}
+        ]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": qty_text,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup_json
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": qty_text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored quantity menu warning: {e}")
+
+    fallback_markup = get_quantity_keyboard(country, user_id)
+    if message_id:
+        try:
+            bot.edit_message_text(qty_text, chat_id, message_id, parse_mode="HTML", reply_markup=fallback_markup)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, qty_text, parse_mode="HTML", reply_markup=fallback_markup)
 
 def get_account_keyboard(user_id):
     lang_code = get_lang(user_id)
@@ -2004,14 +2103,9 @@ def handle_inline_clicks(call):
     elif call.data.startswith("buy_country_"):
         country = call.data.replace("buy_country_", "")
         c_data = product_inventory["Countries"]["items"].get(country, {})
-        flag = get_country_flag(country, c_data.get("code", ""))
         clean_name = format_country_display_name(country, c_data.get("names", {}).get(lang_code, country), lang_code)
         bot.answer_callback_query(call.id, clean_name)
-        try:
-            proto_qty_text = t["qty_header"].format(flag=flag, name=clean_name)
-            bot.edit_message_text(proto_qty_text, call.message.chat.id, call.message.message_id, reply_markup=get_quantity_keyboard(country, user_id))
-        except Exception:
-            pass
+        send_colored_quantity_menu(call.message.chat.id, user_id, country, call.message.message_id)
         return
 
     elif call.data == "admin_broadcast_start":
