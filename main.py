@@ -7,6 +7,7 @@ import os
 import io
 import time
 import base64
+import json
 import requests
 from flask import Flask, request
 
@@ -183,7 +184,6 @@ def format_country_display_name(country_key, raw_name, lang_code="en"):
     clean_en = strip_leading_flag(country_key)
     clean_raw = strip_leading_flag(raw_name if raw_name else country_key)
     if lang_code == "zh":
-        # If raw_name already has Chinese characters (different from English key), use it
         if clean_raw and clean_raw.lower() != clean_en.lower() and any('\u4e00' <= ch <= '\u9fff' for ch in clean_raw):
             return clean_raw
         key_lower = clean_en.lower()
@@ -361,7 +361,6 @@ def load_data_from_firebase():
         support_admin_username = sup
 
 def ensure_user_registered(user_id):
-    """Registers a new user in memory and saves to Firebase ONLY if they are new."""
     is_new = False
     if user_id not in all_users:
         all_users.add(user_id)
@@ -397,7 +396,6 @@ def remove_pending_deposit(dep_id):
 def save_used_txids():
     fb_put("used_txids", list(used_txids))
 
-# Load data & configure webhook on startup (works with both Gunicorn & Python)
 print("Initializing & Loading data from Firebase...")
 load_data_from_firebase()
 
@@ -425,18 +423,20 @@ def is_admin(user_id):
 
 LANG = {
     "en": {
-        "welcome": "📍 Main Menu\n👋 Hello {user_name}!\n\nWelcome to Telegram Bot!\n\nMain Features:\n• Personal Center - Manage your account\n• Products - Browse and buy products\n• TRX & Energy - TRX and energy trading\n• Recharge - Multiple payment methods\n• Contact Customer Service: {support_user} - 24/7 online service\n• Language - Language settings\n\nTips:\nClick the buttons below to access features!",
+        "welcome": "📍 Main Menu\n👋 Hello {user_name}!\n\nWelcome to Telegram Bot!\n\nMain Features:\n• Personal Center - Manage your account\n• Products - Browse and buy products\n• Recharge - Multiple payment methods\n• Contact Customer Service: {support_user} - 24/7 online service\n• Language - Language settings\n• Rules - Platform terms & usage rules\n\nTips:\nClick the buttons below to access features!",
         "products": "📁 Select a country:",
         "account": "◆ PERSONAL CENTER / ACCOUNT\n────────────────────────\nUser ID: {user_id}\nUsername: {username}\nBalance: ${balance:.2f}\nPurchased: {purchased_total}",
         "deposit": "Select amount (USDT):",
         "support": "📞 Contact Customer Service\n\nFor any help, issues or assistance, please contact our customer service admin:\n👉 {support_user}",
+        "rules": "⚠️ Platform Rules & Notice\n────────────────────────\n1. All digital products are checked before delivery.\n2. Please verify your account immediately after purchase.\n3. Deposits are non-refundable once credited to your balance.\n4. Always send the exact USDT amount on the selected network.\n5. For any issues, contact customer service: {support_user}",
         "language": "🌐 Language Settings\n\nPlease click the button below to switch language:",
         "admin": "🛠️ Welcome to Admin Panel\n\nChoose an option below:",
-        "menu_products": "🛍️ Products",
+        "menu_products": "🛒 Products",
         "menu_account": "👤 Personal Center",
-        "menu_deposit": "💰 Recharge",
-        "menu_support": "💬 Contact Customer Service",
+        "menu_deposit": "🪙 Recharge",
+        "menu_support": "📞 Contact Customer Service",
         "menu_lang": "🌐 Language",
+        "menu_rules": "⚠️ Rules",
         "menu_admin": "🛠️ Admin Panel",
         "select_qty": "🔢 Select Quantity:\n\nChoose how many items you want to buy:",
         "select_country": "🌍 Select a country & phone code:",
@@ -491,18 +491,20 @@ LANG = {
         )
     },
     "zh": {
-        "welcome": "📍 主菜单\n👋 你好 {user_name}！\n\n欢迎使用电报机器人！\n\n主要功能：\n• 个人中心 - 管理您的账户\n• 产品中心 - 浏览并购买产品\n• TRX与能量 - TRX及能量交易\n• 账户充值 - 多种支付方式\n• 联系客服：{support_user} - 7/24在线服务\n• 语言设置 - 切换语言选项\n\n提示：\n点击下方按钮访问各项功能！",
+        "welcome": "📍 主菜单\n👋 你好 {user_name}！\n\n欢迎使用电报机器人！\n\n主要功能：\n• 个人中心 - 管理您的账户\n• 产品中心 - 浏览并购买产品\n• 账户充值 - 多种支付方式\n• 联系客服：{support_user} - 7/24在线服务\n• 语言设置 - 切换语言选项\n• 规则说明 - 平台使用条款与规则\n\n提示：\n点击下方按钮访问各项功能！",
         "products": "📁 选择国家：",
         "account": "◆ 个人中心 / 账户信息\n────────────────────────\n用户 ID: {user_id}\n用户名: {username}\n余额: ${balance:.2f}\n已购总额: {purchased_total}",
         "deposit": "请选择充值金额 (USDT)：",
         "support": "📞 联系客服\n\n如有任何帮助、问题或协助，请直接联系我们的客服管理员：\n👉 {support_user}",
+        "rules": "⚠️ 平台规则与须知\n────────────────────────\n1. 所有数字商品在发货前均经过严格检测。\n2. 购买后请立即检查并验证您的账户。\n3. 充值金额一旦入账至您的余额，恕不退款。\n4. 请务必在所选网络上转账准确的 USDT 金额。\n5. 如有任何问题，请联系客服：{support_user}",
         "language": "🌐 语言设置\n\n请点击下方按钮切换语言：",
         "admin": "🛠️ 欢迎来到管理面板\n\n在下方选择一个选项：",
-        "menu_products": "🛍️ 产品中心",
+        "menu_products": "🛒 产品中心",
         "menu_account": "👤 个人中心",
-        "menu_deposit": "💰 账户充值",
-        "menu_support": "💬 联系客服",
+        "menu_deposit": "🪙 账户充值",
+        "menu_support": "📞 联系客服",
         "menu_lang": "🌐 语言设置",
+        "menu_rules": "⚠️ 规则说明",
         "menu_admin": "🛠️ 管理面板",
         "select_qty": "🔢 选择数量：\n\n请选择您要购买的数量：",
         "select_country": "🌍 选择国家及电话区号：",
@@ -561,16 +563,74 @@ LANG = {
 def get_lang(user_id):
     return user_languages.get(user_id, "en")
 
+def send_colored_main_menu(chat_id, text, user_id):
+    """
+    Sends the Main Menu with colored Inline Keyboard Buttons matching the screenshot:
+    Row 1: Products (Blue/primary) | Recharge (Green/success)
+    Row 2: Contact Customer Service (Red/danger) | Personal Center (Blue/primary)
+    Row 3: Language (Green/success) | Rules (Red/danger)
+    Row 4 (Admin only): Admin Panel
+    """
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+
+    inline_keyboard = [
+        [
+            {"text": t["menu_products"], "callback_data": "menu_products", "style": "primary"},
+            {"text": t["menu_deposit"], "callback_data": "menu_deposit", "style": "success"}
+        ],
+        [
+            {"text": t["menu_support"], "callback_data": "menu_support", "style": "danger"},
+            {"text": t["menu_account"], "callback_data": "menu_account", "style": "primary"}
+        ],
+        [
+            {"text": t["menu_lang"], "callback_data": "menu_lang", "style": "success"},
+            {"text": t["menu_rules"], "callback_data": "menu_rules", "style": "danger"}
+        ]
+    ]
+
+    if is_admin(user_id):
+        inline_keyboard.append([
+            {"text": t["menu_admin"], "callback_data": "menu_admin", "style": "primary"}
+        ])
+
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
+    }
+    try:
+        res = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=15)
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored menu send warning: {e}")
+
+    # Fallback if Telegram rejects style parameter on older clients
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products"),
+        types.InlineKeyboardButton(t["menu_deposit"], callback_data="menu_deposit"),
+        types.InlineKeyboardButton(t["menu_support"], callback_data="menu_support"),
+        types.InlineKeyboardButton(t["menu_account"], callback_data="menu_account"),
+        types.InlineKeyboardButton(t["menu_lang"], callback_data="menu_lang"),
+        types.InlineKeyboardButton(t["menu_rules"], callback_data="menu_rules")
+    )
+    if is_admin(user_id):
+        markup.add(types.InlineKeyboardButton(t["menu_admin"], callback_data="menu_admin"))
+    bot.send_message(chat_id, text, reply_markup=markup)
+
 def get_main_menu_keyboard(user_id):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
         types.KeyboardButton(t["menu_products"]),
-        types.KeyboardButton(t["menu_account"]),
         types.KeyboardButton(t["menu_deposit"]),
         types.KeyboardButton(t["menu_support"]),
-        types.KeyboardButton(t["menu_lang"])
+        types.KeyboardButton(t["menu_account"]),
+        types.KeyboardButton(t["menu_lang"]),
+        types.KeyboardButton(t["menu_rules"])
     )
     if is_admin(user_id):
         markup.add(types.KeyboardButton(t["menu_admin"]))
@@ -738,14 +798,15 @@ def get_user_detail_text(target_uid):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    user_id = message.from_user.id
+    user_id = message.chat.id if hasattr(message, 'chat') else message.from_user.id
     user_states.pop(user_id, None)
     ensure_user_registered(user_id)
     lang_code = get_lang(user_id)
     default_user = "用户" if lang_code == "zh" else "User"
-    user_name = message.from_user.first_name or default_user
+    first_name = getattr(message.from_user, 'first_name', None) if hasattr(message, 'from_user') else None
+    user_name = first_name or default_user
     welcome_text = LANG[lang_code]["welcome"].format(user_name=user_name, support_user=support_admin_username)
-    bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_menu_keyboard(user_id))
+    send_colored_main_menu(message.chat.id, welcome_text, user_id)
 
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
@@ -793,15 +854,16 @@ def handle_all_messages(message):
     t = LANG[lang_code]
     text = message.text if message.text else ""
 
-    # 1. Check Main Menu Buttons FIRST so users are never stuck in an input state
+    # 1. Check Main Menu Buttons FIRST
     is_products = text in [LANG["en"]["menu_products"], LANG["zh"]["menu_products"]]
     is_account = text in [LANG["en"]["menu_account"], LANG["zh"]["menu_account"]]
     is_deposit = text in [LANG["en"]["menu_deposit"], LANG["zh"]["menu_deposit"]]
     is_support = text in [LANG["en"]["menu_support"], LANG["zh"]["menu_support"]]
     is_lang = text in [LANG["en"]["menu_lang"], LANG["zh"]["menu_lang"]]
+    is_rules = text in [LANG["en"]["menu_rules"], LANG["zh"]["menu_rules"]]
     is_admin_menu = text in [LANG["en"]["menu_admin"], LANG["zh"]["menu_admin"]]
 
-    if any([is_products, is_account, is_deposit, is_support, is_lang, is_admin_menu]):
+    if any([is_products, is_account, is_deposit, is_support, is_lang, is_rules, is_admin_menu]):
         user_states.pop(user_id, None)
 
         if is_lang:
@@ -815,7 +877,7 @@ def handle_all_messages(message):
             save_user_data(user_id)
             new_lang_code = get_lang(user_id)
             success_msg = f"🌐 Language successfully switched to: {new_lang_name}" if new_lang_code == "en" else f"🌐 语言已成功切换为：{new_lang_name}"
-            bot.send_message(message.chat.id, success_msg, reply_markup=get_main_menu_keyboard(user_id))
+            send_colored_main_menu(message.chat.id, success_msg, user_id)
             return
         elif is_admin_menu:
             if not is_admin(user_id):
@@ -842,10 +904,14 @@ def handle_all_messages(message):
             return
         elif is_support:
             support_msg = t["support"].format(support_user=support_admin_username)
-            bot.send_message(message.chat.id, support_msg)
+            bot.send_message(message.chat.id, support_msg, reply_markup=get_account_keyboard(user_id))
+            return
+        elif is_rules:
+            rules_msg = t["rules"].format(support_user=support_admin_username)
+            bot.send_message(message.chat.id, rules_msg, reply_markup=get_account_keyboard(user_id))
             return
 
-    # 2. Admin-only states (protected with is_admin check)
+    # 2. Admin-only states
     state = user_states.get(user_id, "")
 
     if state == "waiting_for_admin_password" and is_admin(user_id):
@@ -1049,7 +1115,6 @@ def handle_all_messages(message):
         order_id = state.replace("waiting_for_txid_", "")
         trx_text_clean = text.strip() if text else ""
 
-        # Check duplicate TxID if user submitted text
         if trx_text_clean:
             if trx_text_clean.lower() in used_txids:
                 bot.send_message(message.chat.id, t["txid_used"])
@@ -1175,7 +1240,6 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
                 files_in_zip = zip_item["extracted_files"]
                 target_file_name = files_in_zip[0]
 
-                # Build single file zip BEFORE popping or deducting balance
                 single_zip_buffer = io.BytesIO()
                 with pyzipper.AESZipFile(single_zip_buffer, 'w', compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as new_zip:
                     new_zip.setpassword(tfa_code.encode('utf-8'))
@@ -1185,7 +1249,6 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
                         new_zip.writestr(os.path.basename(target_file_name), file_data)
                 single_zip_buffer.seek(0)
 
-                # Now safely deduct balance and update inventory
                 files_in_zip.pop(0)
                 if len(files_in_zip) == 0:
                     zip_list.pop(0)
@@ -1245,6 +1308,73 @@ def handle_inline_clicks(call):
 
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
+
+    # Colored Main Menu Callbacks
+    if call.data == "menu_products":
+        bot.answer_callback_query(call.id)
+        try:
+            bot.edit_message_text(t["products"], call.message.chat.id, call.message.message_id, reply_markup=get_products_countries_keyboard(user_id))
+        except Exception:
+            bot.send_message(call.message.chat.id, t["products"], reply_markup=get_products_countries_keyboard(user_id))
+        return
+
+    if call.data == "menu_deposit":
+        user_states[user_id] = "waiting_for_deposit"
+        bot.answer_callback_query(call.id)
+        try:
+            bot.edit_message_text(t["deposit"], call.message.chat.id, call.message.message_id, reply_markup=get_select_amount_keyboard(user_id))
+        except Exception:
+            bot.send_message(call.message.chat.id, t["deposit"], reply_markup=get_select_amount_keyboard(user_id))
+        return
+
+    if call.data == "menu_support":
+        bot.answer_callback_query(call.id)
+        support_msg = t["support"].format(support_user=support_admin_username)
+        try:
+            bot.edit_message_text(support_msg, call.message.chat.id, call.message.message_id, reply_markup=get_account_keyboard(user_id))
+        except Exception:
+            bot.send_message(call.message.chat.id, support_msg, reply_markup=get_account_keyboard(user_id))
+        return
+
+    if call.data == "menu_account":
+        bot.answer_callback_query(call.id)
+        user = call.from_user
+        no_user_str = "无" if lang_code == "zh" else "N/A"
+        username = f"@{user.username}" if user.username else no_user_str
+        balance_val = user_balances.get(user_id, 0.00)
+        purchased_total = len(user_purchases.get(user_id, []))
+        account_text = t["account"].format(user_id=user.id, username=username, balance=balance_val, purchased_total=purchased_total)
+        try:
+            bot.edit_message_text(account_text, call.message.chat.id, call.message.message_id, reply_markup=get_account_keyboard(user_id))
+        except Exception:
+            bot.send_message(call.message.chat.id, account_text, reply_markup=get_account_keyboard(user_id))
+        return
+
+    if call.data == "menu_lang":
+        bot.answer_callback_query(call.id)
+        try:
+            bot.edit_message_text(t["language"], call.message.chat.id, call.message.message_id, reply_markup=get_language_keyboard(user_id))
+        except Exception:
+            bot.send_message(call.message.chat.id, t["language"], reply_markup=get_language_keyboard(user_id))
+        return
+
+    if call.data == "menu_rules":
+        bot.answer_callback_query(call.id)
+        rules_msg = t["rules"].format(support_user=support_admin_username)
+        try:
+            bot.edit_message_text(rules_msg, call.message.chat.id, call.message.message_id, reply_markup=get_account_keyboard(user_id))
+        except Exception:
+            bot.send_message(call.message.chat.id, rules_msg, reply_markup=get_account_keyboard(user_id))
+        return
+
+    if call.data == "menu_admin":
+        if not is_admin(user_id):
+            bot.answer_callback_query(call.id, "Unauthorized", show_alert=True)
+            return
+        bot.answer_callback_query(call.id)
+        user_states[user_id] = "waiting_for_admin_password"
+        bot.send_message(call.message.chat.id, "🔐 Please enter the Admin Panel password:")
+        return
 
     if call.data == "admin_change_support":
         if not is_admin(user_id):
@@ -1483,22 +1613,11 @@ def handle_inline_clicks(call):
 
         save_user_data(user_id)
         bot.answer_callback_query(call.id, alert_text)
-        lang_code = get_lang(user_id)
-        t = LANG[lang_code]
         try:
-            bot.edit_message_text(
-                t["language"],
-                call.message.chat.id,
-                call.message.message_id,
-                reply_markup=get_language_keyboard(user_id)
-            )
+            bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
             pass
-        try:
-            updated_msg = "👇 菜单已更新：" if lang_code == "zh" else "👇 Menu updated:"
-            bot.send_message(call.message.chat.id, updated_msg, reply_markup=get_main_menu_keyboard(user_id))
-        except Exception:
-            pass
+        send_welcome(call.message)
         return
 
     if call.data == "back_to_account":
