@@ -9,10 +9,11 @@ import time
 import base64
 import json
 import threading
+import queue
 import requests
 from flask import Flask, request
 
-# Load credentials (Uses provided Token as default if BOT_TOKEN env var is not set)
+# Load credentials
 TOKEN = os.environ.get("BOT_TOKEN", "8908618066:AAFbWasMZ1pyrYisSFRoGYY1VFTVEjFK7jE")
 FIREBASE_URL = os.environ.get("FIREBASE_URL")
 RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
@@ -24,7 +25,22 @@ if not FIREBASE_URL:
 
 FIREBASE_URL = FIREBASE_URL.rstrip("/")
 
-bot = telebot.TeleBot(TOKEN, threaded=False)
+# Enable threads so concurrent users do not block each other
+bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=16)
+
+# Persistent HTTP session for faster Firebase & Telegram API calls
+http_session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+http_session.mount("https://", adapter)
+http_session.mount("http://", adapter)
+
+# Concurrency locks to prevent race conditions on balance, stock & deposits
+state_lock = threading.RLock()
+purchase_lock = threading.Lock()
+deposit_lock = threading.Lock()
+
+# Background update queue for instant webhook ACK
+update_queue = queue.Queue(maxsize=5000)
 
 # Support Username & Admin IDs
 support_admin_username = "@proxyvpnservice17"
@@ -47,10 +63,12 @@ user_languages = {}
 all_users = set()
 temp_admin_data = {}
 
+
 def normalize_txid(raw_tx):
     if not raw_tx:
         return ""
     return " ".join(str(raw_tx).split()).strip().lower()
+
 
 # ----------------- COUNTRY FLAG & CHINESE NAME HELPER -----------------
 COUNTRY_ZH_NAMES = {
@@ -182,11 +200,13 @@ COUNTRY_FLAGS_BY_CODE = {
     "+260": "🇿🇲", "+263": "🇿🇼"
 }
 
+
 def strip_leading_flag(text):
     s = str(text).strip()
     if len(s) >= 2 and 0x1F1E6 <= ord(s[0]) <= 0x1F1FF and 0x1F1E6 <= ord(s[1]) <= 0x1F1FF:
         return s[2:].strip()
     return s
+
 
 def format_country_display_name(country_key, raw_name, lang_code="en"):
     clean_en = strip_leading_flag(country_key)
@@ -206,6 +226,7 @@ def format_country_display_name(country_key, raw_name, lang_code="en"):
             return clean_raw[0].upper() + clean_raw[1:]
         return clean_en
 
+
 def get_country_flag(country_name, country_code=""):
     clean_name = strip_leading_flag(country_name).lower()
     if clean_name in COUNTRY_FLAGS_BY_NAME:
@@ -219,23 +240,47 @@ def get_country_flag(country_name, country_code=""):
     if code_clean in COUNTRY_FLAGS_BY_CODE:
         return COUNTRY_FLAGS_BY_CODE[code_clean]
     return "🌐"
-# ----------------------------------------------------------------------
 
-# ----------------- FLASK WEB SERVER & WEBHOOK ROUTE -----------------
+
+# ----------------- FLASK WEB SERVER & ASYNC WEBHOOK WORKER -----------------
 app = Flask(__name__)
+
+
+def _webhook_worker():
+    while True:
+        json_string = update_queue.get()
+        try:
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+        except Exception as e:
+            print(f"Webhook worker error: {e}")
+        finally:
+            update_queue.task_done()
+
+
+threading.Thread(target=_webhook_worker, daemon=True).start()
+
 
 @app.route('/')
 def home():
     return "Telegram Bot is Running via Webhook!"
 
+
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
+        try:
+            update_queue.put_nowait(json_string)
+        except queue.Full:
+            threading.Thread(
+                target=lambda raw=json_string: bot.process_new_updates([telebot.types.Update.de_json(raw)]),
+                daemon=True
+            ).start()
         return '', 200
     return '', 403
+
+
 # --------------------------------------------------------------------------
 
 DEFAULT_DATABASE = {
@@ -287,19 +332,21 @@ DEFAULT_DATABASE = {
 
 product_inventory = DEFAULT_DATABASE["product_inventory"]
 
+
 # ----------------- FIREBASE HELPER FUNCTIONS -----------------
 def fb_get(path):
     try:
-        response = requests.get(f"{FIREBASE_URL}/{path}.json", timeout=15)
+        response = http_session.get(f"{FIREBASE_URL}/{path}.json", timeout=10)
         if response.status_code == 200:
             return response.json()
     except Exception as e:
         print(f"Firebase GET Error ({path}): {e}")
     return None
 
+
 def fb_put(path, data):
     try:
-        response = requests.put(f"{FIREBASE_URL}/{path}.json", json=data, timeout=20)
+        response = http_session.put(f"{FIREBASE_URL}/{path}.json", json=data, timeout=15)
         if response.status_code != 200:
             print(f"Firebase PUT Failed ({path}): {response.status_code} - {response.text}")
         return response.status_code == 200
@@ -307,13 +354,15 @@ def fb_put(path, data):
         print(f"Firebase PUT Error ({path}): {e}")
     return False
 
+
 def fb_delete(path):
     try:
-        response = requests.delete(f"{FIREBASE_URL}/{path}.json", timeout=15)
+        response = http_session.delete(f"{FIREBASE_URL}/{path}.json", timeout=10)
         return response.status_code == 200
     except Exception as e:
         print(f"Firebase DELETE Error ({path}): {e}")
     return False
+
 
 def _prune_records_older_than(records, cutoff_ts):
     if not isinstance(records, list):
@@ -333,25 +382,23 @@ def _prune_records_older_than(records, cutoff_ts):
         kept.append(item)
     return kept, changed
 
+
 def cleanup_old_histories(max_age_seconds=HISTORY_TTL_SECONDS):
-    """
-    Removes purchase and deposit history entries older than 2 hours (7200s)
-    from memory and syncs updated user records to Firebase Realtime Database.
-    """
     cutoff_ts = time.time() - max_age_seconds
     impacted_users = set()
 
-    for uid in list(user_purchases.keys()):
-        pruned, changed = _prune_records_older_than(user_purchases.get(uid, []), cutoff_ts)
-        if changed:
-            user_purchases[uid] = pruned
-            impacted_users.add(int(uid))
+    with state_lock:
+        for uid in list(user_purchases.keys()):
+            pruned, changed = _prune_records_older_than(user_purchases.get(uid, []), cutoff_ts)
+            if changed:
+                user_purchases[uid] = pruned
+                impacted_users.add(int(uid))
 
-    for uid in list(user_deposits.keys()):
-        pruned, changed = _prune_records_older_than(user_deposits.get(uid, []), cutoff_ts)
-        if changed:
-            user_deposits[uid] = pruned
-            impacted_users.add(int(uid))
+        for uid in list(user_deposits.keys()):
+            pruned, changed = _prune_records_older_than(user_deposits.get(uid, []), cutoff_ts)
+            if changed:
+                user_deposits[uid] = pruned
+                impacted_users.add(int(uid))
 
     for uid in impacted_users:
         fb_put(f"user_purchases/{uid}", user_purchases.get(uid, []))
@@ -360,6 +407,7 @@ def cleanup_old_histories(max_age_seconds=HISTORY_TTL_SECONDS):
     if impacted_users:
         print(f"[History Cleanup] Pruned >2h history for {len(impacted_users)} user(s).")
     return len(impacted_users)
+
 
 def start_history_cleanup_scheduler():
     def _worker():
@@ -370,102 +418,124 @@ def start_history_cleanup_scheduler():
             except Exception as e:
                 print(f"[History Cleanup Error]: {e}")
 
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
+    threading.Thread(target=_worker, daemon=True).start()
+
 
 def load_data_from_firebase():
     global user_balances, user_purchases, user_deposits, user_languages, all_users
     global product_inventory, support_admin_username, pending_deposits, used_txids
 
-    b = fb_get("user_balances")
-    if b and isinstance(b, dict):
-        user_balances = {int(k): float(v) for k, v in b.items() if v is not None}
+    with state_lock:
+        b = fb_get("user_balances")
+        if b and isinstance(b, dict):
+            user_balances = {int(k): float(v) for k, v in b.items() if v is not None}
 
-    p = fb_get("user_purchases")
-    if p and isinstance(p, dict):
-        user_purchases = {int(k): v for k, v in p.items() if v is not None}
+        p = fb_get("user_purchases")
+        if p and isinstance(p, dict):
+            user_purchases = {int(k): v for k, v in p.items() if v is not None}
 
-    d = fb_get("user_deposits")
-    if d and isinstance(d, dict):
-        user_deposits = {int(k): v for k, v in d.items() if v is not None}
+        d = fb_get("user_deposits")
+        if d and isinstance(d, dict):
+            user_deposits = {int(k): v for k, v in d.items() if v is not None}
 
-    l = fb_get("user_languages")
-    if l and isinstance(l, dict):
-        user_languages = {int(k): v for k, v in l.items() if v is not None}
+        l = fb_get("user_languages")
+        if l and isinstance(l, dict):
+            user_languages = {int(k): v for k, v in l.items() if v is not None}
 
-    u = fb_get("all_users")
-    if u and isinstance(u, dict):
-        all_users = set(int(k) for k, v in u.items() if v)
+        u = fb_get("all_users")
+        if u and isinstance(u, dict):
+            all_users = set(int(k) for k, v in u.items() if v)
 
-    pd = fb_get("pending_deposits")
-    if pd and isinstance(pd, dict):
-        pending_deposits = pd
+        pd = fb_get("pending_deposits")
+        if pd and isinstance(pd, dict):
+            pending_deposits = pd
 
-    tx = fb_get("used_txids")
-    if tx and isinstance(tx, list):
-        used_txids = set(normalize_txid(x) for x in tx if normalize_txid(x))
-    elif tx and isinstance(tx, dict):
-        used_txids = set(normalize_txid(k) for k in tx.keys() if normalize_txid(k))
+        tx = fb_get("used_txids")
+        if tx and isinstance(tx, list):
+            used_txids = set(normalize_txid(x) for x in tx if normalize_txid(x))
+        elif tx and isinstance(tx, dict):
+            used_txids = set(normalize_txid(k) for k in tx.keys() if normalize_txid(k))
 
-    inv = fb_get("product_inventory")
-    if inv and isinstance(inv, dict):
-        if "Countries" in inv and "items" in inv["Countries"]:
-            for c_key, c_val in inv["Countries"]["items"].items():
-                if "accounts" not in c_val or c_val["accounts"] is None:
-                    c_val["accounts"] = []
-                if "zip_files" not in c_val or c_val["zip_files"] is None:
-                    c_val["zip_files"] = []
-                else:
-                    for zf in c_val["zip_files"]:
-                        if "extracted_files" not in zf or zf["extracted_files"] is None:
-                            zf["extracted_files"] = []
-        product_inventory = inv
+        inv = fb_get("product_inventory")
+        if inv and isinstance(inv, dict):
+            if "Countries" in inv and "items" in inv["Countries"]:
+                for c_key, c_val in inv["Countries"]["items"].items():
+                    if "accounts" not in c_val or c_val["accounts"] is None:
+                        c_val["accounts"] = []
+                    if "zip_files" not in c_val or c_val["zip_files"] is None:
+                        c_val["zip_files"] = []
+                    else:
+                        for zf in c_val["zip_files"]:
+                            if "extracted_files" not in zf or zf["extracted_files"] is None:
+                                zf["extracted_files"] = []
+            product_inventory = inv
 
-    sup = fb_get("support_admin_username")
-    if sup:
-        support_admin_username = sup
+        sup = fb_get("support_admin_username")
+        if sup:
+            support_admin_username = sup
 
     cleanup_old_histories()
 
+
 def ensure_user_registered(user_id):
     is_new = False
-    if user_id not in all_users:
-        all_users.add(user_id)
-        is_new = True
-    if user_id not in user_balances:
-        user_balances[user_id] = 0.00
-    if user_id not in user_purchases:
-        user_purchases[user_id] = []
-    if user_id not in user_deposits:
-        user_deposits[user_id] = []
+    with state_lock:
+        if user_id not in all_users:
+            all_users.add(user_id)
+            is_new = True
+        if user_id not in user_balances:
+            user_balances[user_id] = 0.00
+        if user_id not in user_purchases:
+            user_purchases[user_id] = []
+        if user_id not in user_deposits:
+            user_deposits[user_id] = []
     if is_new:
-        save_user_data(user_id)
+        threading.Thread(target=save_user_data, args=(user_id,), daemon=True).start()
+
 
 def save_user_data(user_id):
-    fb_put(f"user_balances/{user_id}", user_balances.get(user_id, 0.0))
-    fb_put(f"user_purchases/{user_id}", user_purchases.get(user_id, []))
-    fb_put(f"user_deposits/{user_id}", user_deposits.get(user_id, []))
-    fb_put(f"user_languages/{user_id}", user_languages.get(user_id, "en"))
+    with state_lock:
+        bal = user_balances.get(user_id, 0.0)
+        pur = list(user_purchases.get(user_id, []))
+        dep = list(user_deposits.get(user_id, []))
+        lang = user_languages.get(user_id, "en")
+    fb_put(f"user_balances/{user_id}", bal)
+    fb_put(f"user_purchases/{user_id}", pur)
+    fb_put(f"user_deposits/{user_id}", dep)
+    fb_put(f"user_languages/{user_id}", lang)
     fb_put(f"all_users/{user_id}", True)
 
+
 def save_inventory():
-    return fb_put("product_inventory", product_inventory)
+    with state_lock:
+        inv_snapshot = json.loads(json.dumps(product_inventory))
+    return fb_put("product_inventory", inv_snapshot)
+
 
 def save_support():
-    fb_put("support_admin_username", support_admin_username)
+    with state_lock:
+        sup = support_admin_username
+    fb_put("support_admin_username", sup)
+
 
 def save_pending_deposit(dep_id, data):
     fb_put(f"pending_deposits/{dep_id}", data)
 
+
 def remove_pending_deposit(dep_id):
     fb_delete(f"pending_deposits/{dep_id}")
 
+
 def save_used_txids():
-    fb_put("used_txids", sorted(list(used_txids)))
+    with state_lock:
+        tx_list = sorted(list(used_txids))
+    fb_put("used_txids", tx_list)
+
 
 print("Initializing & Loading data from Firebase...")
 load_data_from_firebase()
 start_history_cleanup_scheduler()
+
 
 def setup_bot_startup():
     try:
@@ -479,18 +549,19 @@ def setup_bot_startup():
             current_webhook = bot.get_webhook_info().url
             target_webhook = f"{clean_render_url}/{TOKEN}"
             if current_webhook != target_webhook:
-                bot.remove_webhook()
-                time.sleep(0.5)
                 bot.set_webhook(url=target_webhook)
                 print(f"Webhook set to: {target_webhook}")
     except Exception as e:
         print(f"Startup webhook/command setup warning: {e}")
 
-setup_bot_startup()
+
+threading.Thread(target=setup_bot_startup, daemon=True).start()
 # ----------------- END FIREBASE & STARTUP HELPERS -----------------
+
 
 def is_admin(user_id):
     return int(user_id) in ADMIN_IDS
+
 
 LANG = {
     "en": {
@@ -960,19 +1031,24 @@ LANG = {
     }
 }
 
+
 def get_lang(user_id):
-    return user_languages.get(user_id, "en")
+    with state_lock:
+        return user_languages.get(user_id, "en")
+
 
 def toggle_user_language(user_id):
-    current_lang = user_languages.get(user_id, "en")
-    if current_lang == "en":
-        user_languages[user_id] = "zh"
-        alert_text = "语言已成功切换为中文！"
-    else:
-        user_languages[user_id] = "en"
-        alert_text = "Language successfully changed to English!"
-    save_user_data(user_id)
+    with state_lock:
+        current_lang = user_languages.get(user_id, "en")
+        if current_lang == "en":
+            user_languages[user_id] = "zh"
+            alert_text = "语言已成功切换为中文！"
+        else:
+            user_languages[user_id] = "en"
+            alert_text = "Language successfully changed to English!"
+    threading.Thread(target=save_user_data, args=(user_id,), daemon=True).start()
     return alert_text
+
 
 def remove_old_reply_keyboard(chat_id):
     try:
@@ -981,8 +1057,8 @@ def remove_old_reply_keyboard(chat_id):
     except Exception:
         pass
 
+
 def send_colored_main_menu(chat_id, text, user_id):
-    remove_old_reply_keyboard(chat_id)
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
 
@@ -1012,7 +1088,7 @@ def send_colored_main_menu(chat_id, text, user_id):
         "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
     }
     try:
-        res = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=15)
+        res = http_session.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=10)
         if res.status_code == 200:
             return
     except Exception as e:
@@ -1031,11 +1107,13 @@ def send_colored_main_menu(chat_id, text, user_id):
         markup.add(types.InlineKeyboardButton(t["menu_admin"], callback_data="menu_admin"))
     bot.send_message(chat_id, text, reply_markup=markup)
 
+
 def get_main_menu_inline_back(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
+
 
 def send_colored_main_menu_back(chat_id, text, user_id):
     t = LANG[get_lang(user_id)]
@@ -1043,7 +1121,7 @@ def send_colored_main_menu_back(chat_id, text, user_id):
         [{"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}]
     ]
     try:
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1051,7 +1129,7 @@ def send_colored_main_menu_back(chat_id, text, user_id):
                 "parse_mode": "HTML",
                 "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1059,6 +1137,7 @@ def send_colored_main_menu_back(chat_id, text, user_id):
         print(f"Colored back menu warning: {e}")
 
     bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=get_main_menu_inline_back(user_id))
+
 
 def send_colored_deposit_status(target_uid, text, accepted=True):
     t = LANG[get_lang(target_uid)]
@@ -1084,7 +1163,7 @@ def send_colored_deposit_status(target_uid, text, accepted=True):
         ]
 
     try:
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": target_uid,
@@ -1092,7 +1171,7 @@ def send_colored_deposit_status(target_uid, text, accepted=True):
                 "parse_mode": "HTML",
                 "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1113,6 +1192,7 @@ def send_colored_deposit_status(target_uid, text, accepted=True):
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     bot.send_message(target_uid, text, parse_mode="HTML", reply_markup=markup)
 
+
 def get_select_amount_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=3)
@@ -1127,6 +1207,7 @@ def get_select_amount_keyboard(user_id):
         types.InlineKeyboardButton(t["cancel"], callback_data="dep_cancel")
     )
     return markup
+
 
 def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
     t = LANG[get_lang(user_id)]
@@ -1152,7 +1233,7 @@ def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
         if message_id:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": chat_id,
@@ -1161,11 +1242,11 @@ def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
                     "parse_mode": "HTML",
                     "reply_markup": reply_markup_json
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1173,7 +1254,7 @@ def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1189,6 +1270,7 @@ def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
             pass
     bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=fallback)
 
+
 def get_payment_methods_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -1198,6 +1280,7 @@ def get_payment_methods_keyboard(user_id):
         types.InlineKeyboardButton(t["cancel"], callback_data="dep_cancel")
     )
     return markup
+
 
 def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
     t = LANG[get_lang(user_id)]
@@ -1212,7 +1295,7 @@ def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
         if message_id:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": chat_id,
@@ -1221,11 +1304,11 @@ def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
                     "parse_mode": "HTML",
                     "reply_markup": reply_markup_json
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1233,7 +1316,7 @@ def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1249,6 +1332,7 @@ def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
             pass
     bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=fallback)
 
+
 def get_order_created_keyboard(net_code, order_id, user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -1256,6 +1340,7 @@ def get_order_created_keyboard(net_code, order_id, user_id):
     markup.add(types.InlineKeyboardButton(t["back"], callback_data="dep_confirm"))
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
+
 
 def send_colored_order_created(chat_id, user_id, order_text, order_id, message_id=None):
     t = LANG[get_lang(user_id)]
@@ -1268,7 +1353,7 @@ def send_colored_order_created(chat_id, user_id, order_text, order_id, message_i
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
         if message_id:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": chat_id,
@@ -1277,11 +1362,11 @@ def send_colored_order_created(chat_id, user_id, order_text, order_id, message_i
                     "parse_mode": "HTML",
                     "reply_markup": reply_markup_json
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1289,7 +1374,7 @@ def send_colored_order_created(chat_id, user_id, order_text, order_id, message_i
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1305,6 +1390,7 @@ def send_colored_order_created(chat_id, user_id, order_text, order_id, message_i
             pass
     bot.send_message(chat_id, order_text, parse_mode="HTML", reply_markup=fallback)
 
+
 def get_quantity_keyboard(item_key, user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=3)
@@ -1319,16 +1405,18 @@ def get_quantity_keyboard(item_key, user_id):
     )
     return markup
 
+
 def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
-    c_data = product_inventory["Countries"]["items"].get(country, {})
+    with state_lock:
+        c_data = product_inventory["Countries"]["items"].get(country, {})
+        balance_val = user_balances.get(user_id, 0.00)
     flag = get_country_flag(country, c_data.get("code", ""))
     clean_name = format_country_display_name(country, c_data.get("names", {}).get(lang_code, country), lang_code)
     price = c_data.get("price", 1.00)
     zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in c_data.get("zip_files", []))
     stock_count = len(c_data.get("accounts", [])) + zip_stock_count
-    balance_val = user_balances.get(user_id, 0.00)
 
     qty_text = t["qty_header"].format(
         flag=flag,
@@ -1357,7 +1445,7 @@ def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
         if message_id:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": chat_id,
@@ -1366,11 +1454,11 @@ def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
                     "parse_mode": "HTML",
                     "reply_markup": reply_markup_json
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1378,7 +1466,7 @@ def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1394,6 +1482,7 @@ def send_colored_quantity_menu(chat_id, user_id, country, message_id=None):
             pass
     bot.send_message(chat_id, qty_text, parse_mode="HTML", reply_markup=fallback_markup)
 
+
 def get_account_keyboard(user_id):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
@@ -1401,14 +1490,15 @@ def get_account_keyboard(user_id):
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
 
+
 def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
-    cleanup_old_histories()
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     no_user_str = "无" if lang_code == "zh" else "N/A"
     username = f"@{user_obj.username}" if getattr(user_obj, "username", None) else no_user_str
-    balance_val = user_balances.get(user_id, 0.00)
-    purchased_total = len(user_purchases.get(user_id, []))
+    with state_lock:
+        balance_val = user_balances.get(user_id, 0.00)
+        purchased_total = len(user_purchases.get(user_id, []))
 
     account_text = t["account"].format(
         user_id=user_id,
@@ -1430,7 +1520,7 @@ def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
         if message_id:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": chat_id,
@@ -1439,11 +1529,11 @@ def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
                     "parse_mode": "HTML",
                     "reply_markup": reply_markup_json
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1451,7 +1541,7 @@ def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1472,6 +1562,7 @@ def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
             pass
     bot.send_message(chat_id, account_text, parse_mode="HTML", reply_markup=markup)
 
+
 def send_colored_rules_menu(chat_id, user_id, message_id=None):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
@@ -1490,7 +1581,7 @@ def send_colored_rules_menu(chat_id, user_id, message_id=None):
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
         if message_id:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": chat_id,
@@ -1499,11 +1590,11 @@ def send_colored_rules_menu(chat_id, user_id, message_id=None):
                     "parse_mode": "HTML",
                     "reply_markup": reply_markup_json
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1511,7 +1602,7 @@ def send_colored_rules_menu(chat_id, user_id, message_id=None):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1532,6 +1623,7 @@ def send_colored_rules_menu(chat_id, user_id, message_id=None):
             pass
     bot.send_message(chat_id, rules_msg, parse_mode="HTML", reply_markup=markup)
 
+
 def send_colored_insufficient_stock(chat_id, user_id, stock_count):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
@@ -1549,7 +1641,7 @@ def send_colored_insufficient_stock(chat_id, user_id, stock_count):
 
     reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
     try:
-        res = requests.post(
+        res = http_session.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={
                 "chat_id": chat_id,
@@ -1557,7 +1649,7 @@ def send_colored_insufficient_stock(chat_id, user_id, stock_count):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             },
-            timeout=15
+            timeout=10
         )
         if res.status_code == 200:
             return
@@ -1572,23 +1664,26 @@ def send_colored_insufficient_stock(chat_id, user_id, stock_count):
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=markup)
 
+
 def get_products_countries_keyboard(user_id):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     markup = types.InlineKeyboardMarkup(row_width=1)
-    if "Countries" in product_inventory and "items" in product_inventory["Countries"]:
-        for country, data in product_inventory["Countries"]["items"].items():
-            c_code = data.get("code", "")
-            price = data.get("price", 1.00)
-            raw_name = data.get("names", {}).get(lang_code, country)
-            clean_name = format_country_display_name(country, raw_name, lang_code)
-            flag = get_country_flag(country, c_code)
-            zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in data.get("zip_files", []))
-            total_stock = len(data.get("accounts", [])) + zip_stock_count
-            btn_text = f"{flag} {clean_name} ({c_code})  •  ${price:.2f}  |  📦 {total_stock}"
-            markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"select_country_{country}"))
+    with state_lock:
+        items_snapshot = list(product_inventory.get("Countries", {}).get("items", {}).items())
+    for country, data in items_snapshot:
+        c_code = data.get("code", "")
+        price = data.get("price", 1.00)
+        raw_name = data.get("names", {}).get(lang_code, country)
+        clean_name = format_country_display_name(country, raw_name, lang_code)
+        flag = get_country_flag(country, c_code)
+        zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in data.get("zip_files", []))
+        total_stock = len(data.get("accounts", [])) + zip_stock_count
+        btn_text = f"{flag} {clean_name} ({c_code})  •  ${price:.2f}  |  📦 {total_stock}"
+        markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"select_country_{country}"))
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
+
 
 def send_colored_countries_menu(chat_id, user_id, message_id=None):
     lang_code = get_lang(user_id)
@@ -1597,21 +1692,23 @@ def send_colored_countries_menu(chat_id, user_id, message_id=None):
     styles_cycle = ["primary", "success", "danger"]
 
     inline_keyboard = []
-    if "Countries" in product_inventory and "items" in product_inventory["Countries"]:
-        for idx, (country, data) in enumerate(product_inventory["Countries"]["items"].items()):
-            c_code = data.get("code", "")
-            price = data.get("price", 1.00)
-            raw_name = data.get("names", {}).get(lang_code, country)
-            clean_name = format_country_display_name(country, raw_name, lang_code)
-            flag = get_country_flag(country, c_code)
-            zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in data.get("zip_files", []))
-            total_stock = len(data.get("accounts", [])) + zip_stock_count
+    with state_lock:
+        items_snapshot = list(product_inventory.get("Countries", {}).get("items", {}).items())
 
-            btn_text = f"{flag} {clean_name} ({c_code})  •  ${price:.2f}  |  📦 {total_stock}"
-            btn_style = styles_cycle[idx % len(styles_cycle)]
-            inline_keyboard.append([
-                {"text": btn_text, "callback_data": f"select_country_{country}", "style": btn_style}
-            ])
+    for idx, (country, data) in enumerate(items_snapshot):
+        c_code = data.get("code", "")
+        price = data.get("price", 1.00)
+        raw_name = data.get("names", {}).get(lang_code, country)
+        clean_name = format_country_display_name(country, raw_name, lang_code)
+        flag = get_country_flag(country, c_code)
+        zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in data.get("zip_files", []))
+        total_stock = len(data.get("accounts", [])) + zip_stock_count
+
+        btn_text = f"{flag} {clean_name} ({c_code})  •  ${price:.2f}  |  📦 {total_stock}"
+        btn_style = styles_cycle[idx % len(styles_cycle)]
+        inline_keyboard.append([
+            {"text": btn_text, "callback_data": f"select_country_{country}", "style": btn_style}
+        ])
 
     inline_keyboard.append([
         {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
@@ -1627,7 +1724,7 @@ def send_colored_countries_menu(chat_id, user_id, message_id=None):
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup_json
             }
-            res = requests.post(f"https://api.telegram.org/bot{TOKEN}/editMessageText", data=payload, timeout=15)
+            res = http_session.post(f"https://api.telegram.org/bot{TOKEN}/editMessageText", data=payload, timeout=10)
             if res.status_code == 200:
                 return
         payload = {
@@ -1636,7 +1733,7 @@ def send_colored_countries_menu(chat_id, user_id, message_id=None):
             "parse_mode": "HTML",
             "reply_markup": reply_markup_json
         }
-        res = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=15)
+        res = http_session.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=10)
         if res.status_code == 200:
             return
     except Exception as e:
@@ -1651,6 +1748,7 @@ def send_colored_countries_menu(chat_id, user_id, message_id=None):
             pass
     bot.send_message(chat_id, header_text, parse_mode="HTML", reply_markup=fallback_markup)
 
+
 def get_language_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     current_lang = get_lang(user_id)
@@ -1659,6 +1757,7 @@ def get_language_keyboard(user_id):
     markup.add(types.InlineKeyboardButton(btn_text, callback_data="lang_toggle"))
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
+
 
 def get_admin_panel_keyboard(user_id):
     t = LANG[get_lang(user_id)]
@@ -1674,25 +1773,30 @@ def get_admin_panel_keyboard(user_id):
     )
     return markup
 
+
 def get_management_keyboard(user_id):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    total_users = len(all_users)
+    with state_lock:
+        total_users = len(all_users)
     markup.add(types.InlineKeyboardButton(f"👥 All Users List ({total_users})", callback_data="mgmt_users_0"))
     markup.add(types.InlineKeyboardButton("🔍 Search User by ID", callback_data="mgmt_search_user"))
     markup.add(types.InlineKeyboardButton("💰 Top Balance Users", callback_data="mgmt_top_balance"))
     markup.add(types.InlineKeyboardButton("🛠️ Back to Admin Panel", callback_data="admin_back"))
     return markup
 
+
 def get_users_list_keyboard(page=0, per_page=10):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    users_sorted = sorted(list(all_users), reverse=True)
+    with state_lock:
+        users_sorted = sorted(list(all_users), reverse=True)
+        balances_copy = dict(user_balances)
     total = len(users_sorted)
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     page = max(0, min(page, total_pages - 1))
     start = page * per_page
     end = start + per_page
     for uid in users_sorted[start:end]:
-        bal = user_balances.get(int(uid), 0.0)
+        bal = balances_copy.get(int(uid), 0.0)
         crown = " 👑" if is_admin(uid) else ""
         markup.add(types.InlineKeyboardButton(f"👤 {uid}{crown} | 💰 ${bal:.2f}", callback_data=f"mgmt_user_{uid}"))
     nav = []
@@ -1705,6 +1809,7 @@ def get_users_list_keyboard(page=0, per_page=10):
     markup.add(types.InlineKeyboardButton(f"📄 Page {page+1}/{total_pages} | Total: {total}", callback_data="noop"))
     markup.add(types.InlineKeyboardButton("🔙 Back to Management", callback_data="admin_management"))
     return markup, total_pages, total
+
 
 def get_user_detail_keyboard(target_uid):
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1722,12 +1827,13 @@ def get_user_detail_keyboard(target_uid):
     markup.add(types.InlineKeyboardButton("🛠️ Back to Admin Panel", callback_data="admin_back"))
     return markup
 
+
 def get_user_detail_text(target_uid):
-    cleanup_old_histories()
-    bal = user_balances.get(int(target_uid), 0.0)
-    pur = user_purchases.get(int(target_uid), [])
-    dep = user_deposits.get(int(target_uid), [])
-    lang = user_languages.get(int(target_uid), "en")
+    with state_lock:
+        bal = user_balances.get(int(target_uid), 0.0)
+        pur = list(user_purchases.get(int(target_uid), []))
+        dep = list(user_deposits.get(int(target_uid), []))
+        lang = user_languages.get(int(target_uid), "en")
     is_adm = "Yes 👑" if is_admin(target_uid) else "No"
     return (
         f"👤 User Management\n"
@@ -1742,22 +1848,54 @@ def get_user_detail_text(target_uid):
         f"Select an option to edit balance:"
     )
 
+
+def _run_broadcast_worker(admin_chat_id, source_message_id, target_uids):
+    success_count = 0
+    fail_count = 0
+    for idx, uid in enumerate(target_uids):
+        try:
+            bot.copy_message(chat_id=uid, from_chat_id=admin_chat_id, message_id=source_message_id)
+            success_count += 1
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "Too Many Requests" in err_str:
+                time.sleep(2)
+                try:
+                    bot.copy_message(chat_id=uid, from_chat_id=admin_chat_id, message_id=source_message_id)
+                    success_count += 1
+                except Exception:
+                    fail_count += 1
+            else:
+                fail_count += 1
+        if (idx + 1) % 20 == 0:
+            time.sleep(0.2)
+
+    send_colored_main_menu_back(
+        admin_chat_id,
+        f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users",
+        admin_chat_id
+    )
+
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    user_id = message.chat.id if hasattr(message, 'chat') else message.from_user.id
-    user_states.pop(user_id, None)
+    user_id = message.from_user.id if getattr(message, 'from_user', None) else message.chat.id
+    with state_lock:
+        user_states.pop(user_id, None)
     ensure_user_registered(user_id)
-    cleanup_old_histories()
     lang_code = get_lang(user_id)
     welcome_text = LANG[lang_code]["welcome"].format(support_user=support_admin_username)
     send_colored_main_menu(message.chat.id, welcome_text, user_id)
 
+
 @bot.message_handler(commands=['stock'])
 def stock_command(message):
     user_id = message.from_user.id
-    user_states.pop(user_id, None)
+    with state_lock:
+        user_states.pop(user_id, None)
     ensure_user_registered(user_id)
     send_colored_countries_menu(message.chat.id, user_id)
+
 
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
@@ -1766,26 +1904,34 @@ def admin_command(message):
         msg = "❌ 您无权访问管理面板。" if get_lang(user_id) == "zh" else "❌ You are not authorized to use the admin panel."
         bot.send_message(message.chat.id, msg)
         return
-    user_states[user_id] = "waiting_for_admin_password"
+    with state_lock:
+        user_states[user_id] = "waiting_for_admin_password"
     bot.send_message(message.chat.id, "🔐 Please enter the Admin Panel password:")
+
 
 @bot.message_handler(commands=['cancel'])
 def cancel_operation(message):
     user_id = message.from_user.id
-    user_states.pop(user_id, None)
+    with state_lock:
+        user_states.pop(user_id, None)
     t = LANG[get_lang(user_id)]
     send_colored_main_menu_back(message.chat.id, t["cancel_op"], user_id)
+
 
 @bot.message_handler(content_types=['document'])
 def handle_document_uploads(message):
     user_id = message.from_user.id
-    if user_states.get(user_id) == "waiting_for_zip_file" and is_admin(user_id):
+    with state_lock:
+        current_state = user_states.get(user_id)
         country_name = temp_admin_data.get(user_id)
-        file_info = bot.get_file(message.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        if country_name in product_inventory["Countries"]["items"]:
-            temp_admin_data[f"zip_bytes_{user_id}"] = downloaded_file
-            user_states[user_id] = "waiting_for_zip_2fa"
+        items_map = product_inventory.get("Countries", {}).get("items", {})
+    if current_state == "waiting_for_zip_file" and is_admin(user_id):
+        if country_name in items_map:
+            file_info = bot.get_file(message.document.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            with state_lock:
+                temp_admin_data[f"zip_bytes_{user_id}"] = downloaded_file
+                user_states[user_id] = "waiting_for_zip_2fa"
             response_msg = (
                 f"✅ ZIP File uploaded successfully for {country_name}!\n\n"
                 f"🔐 Now, please send the Password / 2FA Code for this ZIP file so it can be verified and read properly:"
@@ -1793,7 +1939,9 @@ def handle_document_uploads(message):
             bot.send_message(message.chat.id, response_msg)
         else:
             bot.send_message(message.chat.id, "❌ Invalid country selected.")
-            user_states.pop(user_id, None)
+            with state_lock:
+                user_states.pop(user_id, None)
+
 
 @bot.message_handler(content_types=['text', 'photo', 'video', 'document', 'audio'])
 def handle_all_messages(message):
@@ -1805,7 +1953,7 @@ def handle_all_messages(message):
     t = LANG[lang_code]
     text = message.text if message.text else ""
 
-    # 1. If user clicks any leftover old ReplyKeyboard button, clean it up and open the requested page
+    # 1. Legacy ReplyKeyboard button handling
     is_products = text in [LANG["en"]["menu_products"], LANG["zh"]["menu_products"], "🛍️ Products", "🛍️ 产品中心"]
     is_account = text in [LANG["en"]["menu_account"], LANG["zh"]["menu_account"]]
     is_deposit = text in [LANG["en"]["menu_deposit"], LANG["zh"]["menu_deposit"], "💰 Recharge", "💰 账户充值"]
@@ -1815,7 +1963,8 @@ def handle_all_messages(message):
     is_admin_menu = text in [LANG["en"]["menu_admin"], LANG["zh"]["menu_admin"]]
 
     if any([is_products, is_account, is_deposit, is_support, is_lang, is_rules, is_admin_menu]):
-        user_states.pop(user_id, None)
+        with state_lock:
+            user_states.pop(user_id, None)
         remove_old_reply_keyboard(message.chat.id)
 
         if is_lang:
@@ -1828,14 +1977,16 @@ def handle_all_messages(message):
             if not is_admin(user_id):
                 bot.send_message(message.chat.id, "❌ 无权访问。" if lang_code == "zh" else "❌ Unauthorized.")
                 return
-            user_states[user_id] = "waiting_for_admin_password"
+            with state_lock:
+                user_states[user_id] = "waiting_for_admin_password"
             bot.send_message(message.chat.id, "🔐 Please enter the Admin Panel password:")
             return
         elif is_products:
             send_colored_countries_menu(message.chat.id, user_id)
             return
         elif is_deposit:
-            user_states[user_id] = "waiting_for_deposit"
+            with state_lock:
+                user_states[user_id] = "waiting_for_deposit"
             send_colored_select_amount_menu(message.chat.id, user_id)
             return
         elif is_account:
@@ -1849,12 +2000,14 @@ def handle_all_messages(message):
             send_colored_rules_menu(message.chat.id, user_id)
             return
 
-    # 2. Admin-only states
-    state = user_states.get(user_id, "")
+    with state_lock:
+        state = user_states.get(user_id, "")
 
+    # 2. Admin-only states
     if state == "waiting_for_admin_password" and is_admin(user_id):
         if text.strip() == ADMIN_PASSWORD:
-            user_states.pop(user_id, None)
+            with state_lock:
+                user_states.pop(user_id, None)
             bot.send_message(message.chat.id, "🛠️ Welcome to Admin Panel\n\nChoose an option below:", reply_markup=get_admin_panel_keyboard(user_id))
         else:
             bot.send_message(message.chat.id, "❌ Incorrect password! Please enter the Admin Panel password again (or send /cancel):")
@@ -1867,9 +2020,10 @@ def handle_all_messages(message):
         new_support = text.strip()
         if not new_support.startswith("@"):
             new_support = "@" + new_support
-        support_admin_username = new_support
-        save_support()
-        user_states.pop(user_id, None)
+        with state_lock:
+            support_admin_username = new_support
+            user_states.pop(user_id, None)
+        threading.Thread(target=save_support, daemon=True).start()
         bot.send_message(
             message.chat.id,
             f"✅ Support admin username successfully updated to: {support_admin_username}",
@@ -1878,7 +2032,8 @@ def handle_all_messages(message):
         return
 
     if state == "waiting_for_mgmt_search" and is_admin(user_id):
-        user_states.pop(user_id, None)
+        with state_lock:
+            user_states.pop(user_id, None)
         try:
             target = int(text.strip())
         except Exception:
@@ -1899,22 +2054,24 @@ def handle_all_messages(message):
         except Exception:
             bot.send_message(message.chat.id, "❌ Invalid amount! Please enter a positive number (e.g., 10 or 5.50):")
             return
-        old_bal = user_balances.get(target_uid, 0.0)
-        if action == "add":
-            new_bal = old_bal + amount
-            msg_action = f"➕ Added ${amount:.2f}"
-        elif action == "sub":
-            new_bal = max(0.0, old_bal - amount)
-            msg_action = f"➖ Subtracted ${amount:.2f}"
-        elif action == "set":
-            new_bal = amount
-            msg_action = f"✏️ Set to ${amount:.2f}"
-        else:
-            new_bal = old_bal
-            msg_action = ""
-        user_balances[target_uid] = round(new_bal, 2)
-        save_user_data(target_uid)
-        user_states.pop(user_id, None)
+        with state_lock:
+            old_bal = user_balances.get(target_uid, 0.0)
+            if action == "add":
+                new_bal = old_bal + amount
+                msg_action = f"➕ Added ${amount:.2f}"
+            elif action == "sub":
+                new_bal = max(0.0, old_bal - amount)
+                msg_action = f"➖ Subtracted ${amount:.2f}"
+            elif action == "set":
+                new_bal = amount
+                msg_action = f"✏️ Set to ${amount:.2f}"
+            else:
+                new_bal = old_bal
+                msg_action = ""
+            new_bal = round(new_bal, 2)
+            user_balances[target_uid] = new_bal
+            user_states.pop(user_id, None)
+        threading.Thread(target=save_user_data, args=(target_uid,), daemon=True).start()
         bot.send_message(
             message.chat.id,
             f"✅ Balance Updated!\n\n👤 User ID: {target_uid}\n{msg_action}\n💰 Old Balance: ${old_bal:.2f}\n💰 New Balance: ${new_bal:.2f}",
@@ -1937,31 +2094,37 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, "❌ Please enter a country name:")
             return
         c_name = strip_leading_flag(text.strip()).capitalize()
-        if c_name not in product_inventory["Countries"]["items"]:
-            temp_admin_data[user_id] = c_name
-            user_states[user_id] = "waiting_for_country_code"
+        with state_lock:
+            exists = c_name in product_inventory["Countries"]["items"]
+            if not exists:
+                temp_admin_data[user_id] = c_name
+                user_states[user_id] = "waiting_for_country_code"
+            else:
+                user_states.pop(user_id, None)
+        if not exists:
             bot.send_message(message.chat.id, f"📱 Now enter country phone code for {c_name} (e.g., +880):")
         else:
             bot.send_message(message.chat.id, f"⚠️ Country {c_name} already exists.")
-            user_states.pop(user_id, None)
         return
 
     if state == "waiting_for_country_code" and is_admin(user_id):
         c_code = text.strip()
-        c_name = temp_admin_data.get(user_id)
+        with state_lock:
+            c_name = temp_admin_data.get(user_id)
+            if c_name and c_code:
+                zh_name = format_country_display_name(c_name, c_name, "zh")
+                product_inventory["Countries"]["items"][c_name] = {
+                    "code": c_code,
+                    "price": 1.00,
+                    "names": {"en": c_name, "zh": zh_name},
+                    "accounts": [],
+                    "zip_files": []
+                }
+            user_states.pop(user_id, None)
         if c_name and c_code:
-            zh_name = format_country_display_name(c_name, c_name, "zh")
-            product_inventory["Countries"]["items"][c_name] = {
-                "code": c_code,
-                "price": 1.00,
-                "names": {"en": c_name, "zh": zh_name},
-                "accounts": [],
-                "zip_files": []
-            }
-            save_inventory()
+            threading.Thread(target=save_inventory, daemon=True).start()
             flag = get_country_flag(c_name, c_code)
             bot.send_message(message.chat.id, f"✅ Country {flag} {c_name} ({c_code}) added successfully!", reply_markup=get_admin_panel_keyboard(user_id))
-        user_states.pop(user_id, None)
         return
 
     if state.startswith("waiting_for_edit_price_") and is_admin(user_id):
@@ -1970,57 +2133,64 @@ def handle_all_messages(message):
             new_price = float(text.strip())
             if new_price < 0:
                 raise ValueError()
-            if country_name in product_inventory["Countries"]["items"]:
-                product_inventory["Countries"]["items"][country_name]["price"] = new_price
-                save_inventory()
+            with state_lock:
+                found = country_name in product_inventory["Countries"]["items"]
+                if found:
+                    product_inventory["Countries"]["items"][country_name]["price"] = new_price
+                user_states.pop(user_id, None)
+            if found:
+                threading.Thread(target=save_inventory, daemon=True).start()
                 bot.send_message(message.chat.id, f"✅ Price for {country_name} successfully updated to ${new_price:.2f}!", reply_markup=get_admin_panel_keyboard(user_id))
             else:
                 bot.send_message(message.chat.id, "❌ Country not found.")
         except ValueError:
             bot.send_message(message.chat.id, "❌ Invalid price! Please enter a valid number (e.g., 1.50 or 2):")
-        user_states.pop(user_id, None)
+            with state_lock:
+                user_states.pop(user_id, None)
         return
 
     if state.startswith("waiting_for_rename_country_") and is_admin(user_id):
         old_country = state.replace("waiting_for_rename_country_", "")
         new_country = strip_leading_flag(text.strip()).capitalize()
-        proto_items = product_inventory["Countries"]["items"]
-        if new_country in proto_items:
-            bot.send_message(message.chat.id, f"⚠️ Country {new_country} already exists!")
-        elif old_country in proto_items:
-            proto_items[new_country] = proto_items.pop(old_country)
-            if "names" in proto_items[new_country]:
-                proto_items[new_country]["names"]["en"] = new_country
-                proto_items[new_country]["names"]["zh"] = format_country_display_name(new_country, new_country, "zh")
-            save_inventory()
-            bot.send_message(message.chat.id, f"✅ Successfully renamed country {old_country} to {new_country}!", reply_markup=get_admin_panel_keyboard(user_id))
-        else:
-            bot.send_message(message.chat.id, "❌ Country not found.")
-        user_states.pop(user_id, None)
+        with state_lock:
+            proto_items = product_inventory["Countries"]["items"]
+            if new_country in proto_items:
+                msg = f"⚠️ Country {new_country} already exists!"
+                should_save = False
+            elif old_country in proto_items:
+                proto_items[new_country] = proto_items.pop(old_country)
+                if "names" in proto_items[new_country]:
+                    proto_items[new_country]["names"]["en"] = new_country
+                    proto_items[new_country]["names"]["zh"] = format_country_display_name(new_country, new_country, "zh")
+                msg = f"✅ Successfully renamed country {old_country} to {new_country}!"
+                should_save = True
+            else:
+                msg = "❌ Country not found."
+                should_save = False
+            user_states.pop(user_id, None)
+        if should_save:
+            threading.Thread(target=save_inventory, daemon=True).start()
+        bot.send_message(message.chat.id, msg, reply_markup=get_admin_panel_keyboard(user_id))
         return
 
     if state == "waiting_for_broadcast_message" and is_admin(user_id):
-        user_states.pop(user_id, None)
-        success_count = 0
-        fail_count = 0
-        bot.send_message(message.chat.id, "⏳ Broadcasting message to all users, please wait...")
-        for uid in list(all_users):
-            try:
-                bot.copy_message(chat_id=uid, from_chat_id=message.chat.id, message_id=message.message_id)
-                success_count += 1
-            except Exception:
-                fail_count += 1
-        send_colored_main_menu_back(
-            message.chat.id,
-            f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users",
-            user_id
-        )
+        with state_lock:
+            user_states.pop(user_id, None)
+            target_uids = list(all_users)
+        bot.send_message(message.chat.id, f"⏳ Broadcasting message to {len(target_uids)} users in background...")
+        threading.Thread(
+            target=_run_broadcast_worker,
+            args=(message.chat.id, message.message_id, target_uids),
+            daemon=True
+        ).start()
         return
 
     if state == "waiting_for_zip_2fa" and is_admin(user_id):
         tfa_code = text.strip()
-        country_name = temp_admin_data.get(user_id)
-        raw_zip_bytes = temp_admin_data.get(f"zip_bytes_{user_id}")
+        with state_lock:
+            country_name = temp_admin_data.pop(user_id, None)
+            raw_zip_bytes = temp_admin_data.pop(f"zip_bytes_{user_id}", None)
+            user_states.pop(user_id, None)
         if country_name and raw_zip_bytes and tfa_code:
             zip_bytes = io.BytesIO(raw_zip_bytes)
             try:
@@ -2031,15 +2201,15 @@ def handle_all_messages(message):
                     if not valid_files:
                         bot.send_message(message.chat.id, "❌ The ZIP archive contains no valid files.", reply_markup=get_admin_panel_keyboard(user_id))
                     else:
-                        if "zip_files" not in product_inventory["Countries"]["items"][country_name]:
-                            product_inventory["Countries"]["items"][country_name]["zip_files"] = []
-
                         zip_b64 = base64.b64encode(raw_zip_bytes).decode('utf-8')
-                        product_inventory["Countries"]["items"][country_name]["zip_files"].append({
-                            "zip_b64": zip_b64,
-                            "2fa": tfa_code,
-                            "extracted_files": valid_files
-                        })
+                        with state_lock:
+                            if "zip_files" not in product_inventory["Countries"]["items"][country_name]:
+                                product_inventory["Countries"]["items"][country_name]["zip_files"] = []
+                            product_inventory["Countries"]["items"][country_name]["zip_files"].append({
+                                "zip_b64": zip_b64,
+                                "2fa": tfa_code,
+                                "extracted_files": valid_files
+                            })
                         saved = save_inventory()
                         if saved:
                             bot.send_message(message.chat.id, f"✅ Successfully added & saved ZIP stock for {country_name}!\n📁 Total valid files: {len(valid_files)}\n🔐 Password / 2FA: {tfa_code}", reply_markup=get_admin_panel_keyboard(user_id))
@@ -2047,9 +2217,6 @@ def handle_all_messages(message):
                             bot.send_message(message.chat.id, "⚠️ Stock added in memory but failed to save to Firebase! Check file size or Firebase permissions.", reply_markup=get_admin_panel_keyboard(user_id))
             except Exception as e:
                 bot.send_message(message.chat.id, f"❌ Password Error!\nError details: {str(e)}", reply_markup=get_admin_panel_keyboard(user_id))
-        user_states.pop(user_id, None)
-        temp_admin_data.pop(user_id, None)
-        temp_admin_data.pop(f"zip_bytes_{user_id}", None)
         return
 
     # 3. User Input States
@@ -2057,24 +2224,27 @@ def handle_all_messages(message):
         order_id = state.replace("waiting_for_txid_", "")
         trx_text_clean = normalize_txid(text) if text else ""
 
-        if trx_text_clean:
-            if trx_text_clean in used_txids:
-                bot.send_message(message.chat.id, t["txid_used"], parse_mode="HTML")
-                return
-            used_txids.add(trx_text_clean)
-            save_used_txids()
+        with deposit_lock:
+            with state_lock:
+                if trx_text_clean and trx_text_clean in used_txids:
+                    bot.send_message(message.chat.id, t["txid_used"], parse_mode="HTML")
+                    return
+                if trx_text_clean:
+                    used_txids.add(trx_text_clean)
+                user_states.pop(user_id, None)
+                dep_amt = user_amounts.get(user_id, 3.00)
+                dep_id = f"dep_{user_id}_{int(time.time())}_{random.randint(100, 999)}"
+                dep_data = {
+                    "user_id": user_id,
+                    "amount": dep_amt,
+                    "order_id": order_id,
+                    "txid": trx_text_clean
+                }
+                pending_deposits[dep_id] = dep_data
 
-        user_states.pop(user_id, None)
-        dep_amt = user_amounts.get(user_id, 3.00)
-        dep_id = f"dep_{user_id}_{int(time.time())}"
-        dep_data = {
-            "user_id": user_id,
-            "amount": dep_amt,
-            "order_id": order_id,
-            "txid": trx_text_clean
-        }
-        pending_deposits[dep_id] = dep_data
-        save_pending_deposit(dep_id, dep_data)
+        if trx_text_clean:
+            threading.Thread(target=save_used_txids, daemon=True).start()
+        threading.Thread(target=save_pending_deposit, args=(dep_id, dep_data), daemon=True).start()
 
         admin_id = ADMIN_IDS[0]
         user_name = message.from_user.first_name or "N/A"
@@ -2114,7 +2284,8 @@ def handle_all_messages(message):
             if qty <= 0:
                 bot.send_message(message.chat.id, t["invalid_qty_zero"])
                 return
-            user_states.pop(user_id, None)
+            with state_lock:
+                user_states.pop(user_id, None)
             process_product_purchase(message.chat.id, user_id, item_key, qty)
         except ValueError:
             bot.send_message(message.chat.id, t["invalid_qty_num"])
@@ -2127,121 +2298,150 @@ def handle_all_messages(message):
             if custom_amount < min_limit:
                 bot.send_message(message.chat.id, t["min_deposit_err"].format(min_limit=min_limit))
                 return
-            user_amounts[user_id] = custom_amount
-            user_states[user_id] = "waiting_for_payment_method"
+            with state_lock:
+                user_amounts[user_id] = custom_amount
+                user_states[user_id] = "waiting_for_payment_method"
             send_colored_payment_methods(message.chat.id, user_id, custom_amount)
         except ValueError:
             bot.send_message(message.chat.id, t["invalid_amount"])
         return
 
+
 def process_product_purchase(chat_id, user_id, item_key, qty):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
-    if "Countries" in product_inventory and item_key in product_inventory["Countries"]["items"]:
-        c_data = product_inventory["Countries"]["items"][item_key]
-        price_per_unit = c_data.get("price", 1.00)
-        zip_list = c_data.get("zip_files", [])
-        accounts_list = c_data.get("accounts", [])
-    else:
-        bot.send_message(chat_id, t["product_not_found"])
-        return
 
-    zip_total_files = sum(len(zf.get("extracted_files", [])) for zf in zip_list)
-    total_stock = len(accounts_list) + zip_total_files
-    if total_stock < qty:
-        send_colored_insufficient_stock(chat_id, user_id, total_stock)
-        return
+    with purchase_lock:
+        with state_lock:
+            if "Countries" in product_inventory and item_key in product_inventory["Countries"]["items"]:
+                c_data = product_inventory["Countries"]["items"][item_key]
+                price_per_unit = c_data.get("price", 1.00)
+                zip_list = c_data.get("zip_files", [])
+                accounts_list = c_data.get("accounts", [])
+            else:
+                c_data = None
 
-    total_price = round(price_per_unit * qty, 2)
-    user_balance = user_balances.get(user_id, 0.00)
-    if user_balance < total_price:
-        send_colored_main_menu_back(
-            chat_id,
-            t["insufficient_balance"].format(required=total_price, balance=user_balance),
-            user_id
-        )
-        return
+            if not c_data:
+                bot.send_message(chat_id, t["product_not_found"])
+                return
 
-    flag = get_country_flag(item_key, c_data.get("code", ""))
-    display_country_name = format_country_display_name(item_key, c_data.get("names", {}).get(lang_code, item_key), lang_code)
-    clean_en_name = format_country_display_name(item_key, item_key, "en")
-    delivered_count = 0
-    for _ in range(qty):
+            zip_total_files = sum(len(zf.get("extracted_files", [])) for zf in zip_list)
+            total_stock = len(accounts_list) + zip_total_files
+            if total_stock < qty:
+                send_colored_insufficient_stock(chat_id, user_id, total_stock)
+                return
+
+            total_price = round(price_per_unit * qty, 2)
+            user_balance = user_balances.get(user_id, 0.00)
+            if user_balance < total_price:
+                send_colored_main_menu_back(
+                    chat_id,
+                    t["insufficient_balance"].format(required=total_price, balance=user_balance),
+                    user_id
+                )
+                return
+
+            flag = get_country_flag(item_key, c_data.get("code", ""))
+            display_country_name = format_country_display_name(item_key, c_data.get("names", {}).get(lang_code, item_key), lang_code)
+            clean_en_name = format_country_display_name(item_key, item_key, "en")
+
+            # Prepare items to deliver atomically under lock
+            items_to_deliver = []
+            try:
+                for _ in range(qty):
+                    while len(zip_list) > 0 and len(zip_list[0].get("extracted_files", [])) == 0:
+                        zip_list.pop(0)
+
+                    if len(zip_list) > 0:
+                        zip_item = zip_list[0]
+                        if "zip_b64" in zip_item:
+                            orig_zip_bytes = base64.b64decode(zip_item["zip_b64"])
+                        else:
+                            orig_zip_bytes = bytes(zip_item["zip_bytes"])
+                        tfa_code = zip_item["2fa"]
+                        files_in_zip = zip_item["extracted_files"]
+                        target_file_name = files_in_zip.pop(0)
+                        if len(files_in_zip) == 0:
+                            zip_list.pop(0)
+
+                        single_zip_buffer = io.BytesIO()
+                        with pyzipper.AESZipFile(single_zip_buffer, 'w', compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as new_zip:
+                            new_zip.setpassword(tfa_code.encode('utf-8'))
+                            with pyzipper.AESZipFile(io.BytesIO(orig_zip_bytes), 'r') as orig_zip:
+                                orig_zip.setpassword(tfa_code.encode('utf-8'))
+                                file_data = orig_zip.read(target_file_name)
+                                new_zip.writestr(os.path.basename(target_file_name), file_data)
+                        single_zip_buffer.seek(0)
+
+                        user_balances[user_id] = round(user_balances.get(user_id, 0.0) - price_per_unit, 2)
+                        purchase_text = f"Bought {clean_en_name} (ZIP file) for ${price_per_unit:.2f}"
+                        user_purchases.setdefault(user_id, []).append({"text": purchase_text, "timestamp": time.time()})
+
+                        items_to_deliver.append({
+                            "kind": "zip",
+                            "buffer": single_zip_buffer,
+                            "file_short_name": os.path.basename(target_file_name),
+                            "tfa": tfa_code,
+                            "price": price_per_unit,
+                            "balance": user_balances[user_id]
+                        })
+                    elif len(accounts_list) > 0:
+                        purchased_item = accounts_list.pop(0)
+                        acc_num = purchased_item.get("number", "N/A")
+                        acc_2fa = purchased_item.get("2fa", "N/A")
+
+                        user_balances[user_id] = round(user_balances.get(user_id, 0.0) - price_per_unit, 2)
+                        purchase_text = f"Bought {clean_en_name}: {acc_num} for ${price_per_unit:.2f}"
+                        user_purchases.setdefault(user_id, []).append({"text": purchase_text, "timestamp": time.time()})
+
+                        items_to_deliver.append({
+                            "kind": "acc",
+                            "num": acc_num,
+                            "tfa": acc_2fa,
+                            "price": price_per_unit,
+                            "balance": user_balances[user_id]
+                        })
+            except Exception as e:
+                print(f"Error preparing product: {e}")
+                bot.send_message(chat_id, t["deliver_err"].format(err=str(e)))
+                return
+
+    # Send files/messages outside lock so other users aren't blocked during upload
+    for entry in items_to_deliver:
         try:
-            while len(zip_list) > 0 and len(zip_list[0].get("extracted_files", [])) == 0:
-                zip_list.pop(0)
-
-            if len(zip_list) > 0:
-                zip_item = zip_list[0]
-                if "zip_b64" in zip_item:
-                    orig_zip_bytes = base64.b64decode(zip_item["zip_b64"])
-                else:
-                    orig_zip_bytes = bytes(zip_item["zip_bytes"])
-                tfa_code = zip_item["2fa"]
-                files_in_zip = zip_item["extracted_files"]
-                target_file_name = files_in_zip[0]
-
-                single_zip_buffer = io.BytesIO()
-                with pyzipper.AESZipFile(single_zip_buffer, 'w', compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as new_zip:
-                    new_zip.setpassword(tfa_code.encode('utf-8'))
-                    with pyzipper.AESZipFile(io.BytesIO(orig_zip_bytes), 'r') as orig_zip:
-                        orig_zip.setpassword(tfa_code.encode('utf-8'))
-                        file_data = orig_zip.read(target_file_name)
-                        new_zip.writestr(os.path.basename(target_file_name), file_data)
-                single_zip_buffer.seek(0)
-
-                files_in_zip.pop(0)
-                if len(files_in_zip) == 0:
-                    zip_list.pop(0)
-
-                user_balances[user_id] = round(user_balances.get(user_id, 0.0) - price_per_unit, 2)
-                purchase_text = f"Bought {clean_en_name} (ZIP file) for ${price_per_unit:.2f}"
-                user_purchases.setdefault(user_id, []).append({"text": purchase_text, "timestamp": time.time()})
-                delivered_count += 1
-
-                file_short_name = os.path.basename(target_file_name)
+            if entry["kind"] == "zip":
                 caption_txt = t["deliver_zip_caption"].format(
                     flag=flag,
                     name=display_country_name,
-                    file=file_short_name,
-                    tfa=tfa_code,
-                    price=price_per_unit,
-                    balance=user_balances[user_id]
+                    file=entry["file_short_name"],
+                    tfa=entry["tfa"],
+                    price=entry["price"],
+                    balance=entry["balance"]
                 )
                 bot.send_document(
                     chat_id,
-                    document=single_zip_buffer,
-                    visible_file_name=f"{display_country_name}_{file_short_name}.zip",
+                    document=entry["buffer"],
+                    visible_file_name=f"{display_country_name}_{entry['file_short_name']}.zip",
                     caption=caption_txt,
                     parse_mode="HTML"
                 )
-            elif len(accounts_list) > 0:
-                purchased_item = accounts_list.pop(0)
-                acc_num = purchased_item.get("number", "N/A")
-                acc_2fa = purchased_item.get("2fa", "N/A")
-
-                user_balances[user_id] = round(user_balances.get(user_id, 0.0) - price_per_unit, 2)
-                purchase_text = f"Bought {clean_en_name}: {acc_num} for ${price_per_unit:.2f}"
-                user_purchases.setdefault(user_id, []).append({"text": purchase_text, "timestamp": time.time()})
-                delivered_count += 1
-
+            else:
                 success_text = t["deliver_acc_text"].format(
                     flag=flag,
                     name=display_country_name,
-                    num=acc_num,
-                    tfa=acc_2fa,
-                    price=price_per_unit,
-                    balance=user_balances[user_id]
+                    num=entry["num"],
+                    tfa=entry["tfa"],
+                    price=entry["price"],
+                    balance=entry["balance"]
                 )
                 bot.send_message(chat_id, success_text, parse_mode="HTML")
         except Exception as e:
-            print(f"Error in delivering product: {e}")
-            bot.send_message(chat_id, t["deliver_err"].format(err=str(e)))
-            break
+            print(f"Error sending item: {e}")
 
-    if delivered_count > 0:
-        save_user_data(user_id)
-        save_inventory()
+    if items_to_deliver:
+        threading.Thread(target=save_user_data, args=(user_id,), daemon=True).start()
+        threading.Thread(target=save_inventory, daemon=True).start()
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_inline_clicks(call):
@@ -2258,7 +2458,8 @@ def handle_inline_clicks(call):
         return
 
     if call.data == "menu_deposit":
-        user_states[user_id] = "waiting_for_deposit"
+        with state_lock:
+            user_states[user_id] = "waiting_for_deposit"
         bot.answer_callback_query(call.id)
         send_colored_select_amount_menu(call.message.chat.id, user_id, call.message.message_id)
         return
@@ -2278,7 +2479,8 @@ def handle_inline_clicks(call):
         return
 
     if call.data in ["menu_lang", "lang_toggle"]:
-        user_states.pop(user_id, None)
+        with state_lock:
+            user_states.pop(user_id, None)
         alert_text = toggle_user_language(user_id)
         bot.answer_callback_query(call.id, alert_text)
         new_lang_code = get_lang(user_id)
@@ -2300,14 +2502,16 @@ def handle_inline_clicks(call):
             bot.answer_callback_query(call.id, "Unauthorized", show_alert=True)
             return
         bot.answer_callback_query(call.id)
-        user_states[user_id] = "waiting_for_admin_password"
+        with state_lock:
+            user_states[user_id] = "waiting_for_admin_password"
         bot.send_message(call.message.chat.id, "🔐 Please enter the Admin Panel password:")
         return
 
     if call.data == "admin_change_support":
         if not is_admin(user_id):
             return
-        user_states[user_id] = "waiting_for_new_support_username"
+        with state_lock:
+            user_states[user_id] = "waiting_for_new_support_username"
         bot.answer_callback_query(call.id, "Change Support Username")
         try:
             bot.edit_message_text(
@@ -2327,25 +2531,32 @@ def handle_inline_clicks(call):
         action = "accept" if "accept" in call.data else "reject"
         dep_id = call.data.replace("dep_accept_", "").replace("dep_reject_", "")
 
-        if dep_id in pending_deposits:
-            dep_info = pending_deposits.pop(dep_id)
-            remove_pending_deposit(dep_id)
-            target_uid = int(dep_info["user_id"])
-            amount = float(dep_info["amount"])
-            order_id = dep_info["order_id"]
+        with deposit_lock:
+            with state_lock:
+                dep_info = pending_deposits.pop(dep_id, None)
+                if dep_info is not None:
+                    target_uid = int(dep_info["user_id"])
+                    amount = float(dep_info["amount"])
+                    order_id = dep_info["order_id"]
+                    if action == "accept":
+                        old_bal = user_balances.get(target_uid, 0.0)
+                        new_bal = round(old_bal + amount, 2)
+                        user_balances[target_uid] = new_bal
+                        user_deposits.setdefault(target_uid, []).append({
+                            "text": f"Deposited ${amount:.2f} (Order: {order_id})",
+                            "timestamp": time.time()
+                        })
+                    else:
+                        txid_val = normalize_txid(dep_info.get("txid", ""))
+                        if txid_val and txid_val in used_txids:
+                            used_txids.remove(txid_val)
+
+        if dep_info is not None:
+            threading.Thread(target=remove_pending_deposit, args=(dep_id,), daemon=True).start()
             target_t = LANG[get_lang(target_uid)]
 
             if action == "accept":
-                old_bal = user_balances.get(target_uid, 0.0)
-                new_bal = round(old_bal + amount, 2)
-                user_balances[target_uid] = new_bal
-
-                user_deposits.setdefault(target_uid, []).append({
-                    "text": f"Deposited ${amount:.2f} (Order: {order_id})",
-                    "timestamp": time.time()
-                })
-                save_user_data(target_uid)
-
+                threading.Thread(target=save_user_data, args=(target_uid,), daemon=True).start()
                 bot.answer_callback_query(call.id, "Deposit Accepted & Credited!", show_alert=True)
                 try:
                     bot.edit_message_text(f"✅ Deposit Accepted!\nOrder ID: {order_id}\nCredited Amount: ${amount:.2f} to User {target_uid}", call.message.chat.id, call.message.message_id)
@@ -2357,11 +2568,7 @@ def handle_inline_clicks(call):
                 except Exception:
                     pass
             else:
-                txid_val = normalize_txid(dep_info.get("txid", ""))
-                if txid_val and txid_val in used_txids:
-                    used_txids.remove(txid_val)
-                    save_used_txids()
-
+                threading.Thread(target=save_used_txids, daemon=True).start()
                 bot.answer_callback_query(call.id, "Deposit Rejected!", show_alert=True)
                 try:
                     bot.edit_message_text(f"❌ Deposit Rejected!\nOrder ID: {order_id} for User {target_uid}", call.message.chat.id, call.message.message_id)
@@ -2378,7 +2585,8 @@ def handle_inline_clicks(call):
 
     if call.data.startswith("send_order_id_"):
         order_id = call.data.replace("send_order_id_", "")
-        user_states[user_id] = f"waiting_for_txid_{order_id}"
+        with state_lock:
+            user_states[user_id] = f"waiting_for_txid_{order_id}"
         bot.answer_callback_query(call.id)
 
         prompt_text = t["txid_prompt"].format(order_id=order_id)
@@ -2393,7 +2601,8 @@ def handle_inline_clicks(call):
             bot.answer_callback_query(call.id, "Unauthorized", show_alert=True)
             return
         bot.answer_callback_query(call.id, "Management")
-        total_users = len(all_users)
+        with state_lock:
+            total_users = len(all_users)
         text = (
             f"👥 Management\n"
             f"──────────────────────\n"
@@ -2426,7 +2635,8 @@ def handle_inline_clicks(call):
     if call.data == "mgmt_search_user":
         if not is_admin(user_id):
             return
-        user_states[user_id] = "waiting_for_mgmt_search"
+        with state_lock:
+            user_states[user_id] = "waiting_for_mgmt_search"
         bot.answer_callback_query(call.id, "Search User")
         try:
             bot.edit_message_text("🔍 Search User\n\nPlease send User ID (e.g., 123456789):", call.message.chat.id, call.message.message_id)
@@ -2438,10 +2648,12 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         bot.answer_callback_query(call.id, "Top Balance")
-        top = sorted(all_users, key=lambda u: user_balances.get(int(u), 0.0), reverse=True)[:10]
+        with state_lock:
+            top = sorted(all_users, key=lambda u: user_balances.get(int(u), 0.0), reverse=True)[:10]
+            balances_copy = dict(user_balances)
         markup = types.InlineKeyboardMarkup(row_width=1)
         for uid in top:
-            bal = user_balances.get(int(uid), 0.0)
+            bal = balances_copy.get(int(uid), 0.0)
             markup.add(types.InlineKeyboardButton(f"👤 {uid} | 💰 ${bal:.2f}", callback_data=f"mgmt_user_{uid}"))
         markup.add(types.InlineKeyboardButton("🔙 Back to Management", callback_data="admin_management"))
         try:
@@ -2466,8 +2678,9 @@ def handle_inline_clicks(call):
             return
         rest = call.data.replace("mgmt_bal_", "")
         action, target_uid = rest.split("_")
-        user_states[user_id] = f"waiting_for_mgmt_bal_{action}_{target_uid}"
-        old_bal = user_balances.get(int(target_uid), 0.0)
+        with state_lock:
+            user_states[user_id] = f"waiting_for_mgmt_bal_{action}_{target_uid}"
+            old_bal = user_balances.get(int(target_uid), 0.0)
         label = {"add": "➕ Add Balance", "sub": "➖ Subtract Balance", "set": "✏️ Set Balance"}[action]
         bot.answer_callback_query(call.id, label)
         try:
@@ -2483,9 +2696,10 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         target_uid = int(call.data.replace("mgmt_bal_reset_", ""))
-        old_bal = user_balances.get(target_uid, 0.0)
-        user_balances[target_uid] = 0.0
-        save_user_data(target_uid)
+        with state_lock:
+            old_bal = user_balances.get(target_uid, 0.0)
+            user_balances[target_uid] = 0.0
+        threading.Thread(target=save_user_data, args=(target_uid,), daemon=True).start()
         bot.answer_callback_query(call.id, "Balance Reset to $0", show_alert=True)
         try:
             bot.edit_message_text(
@@ -2506,8 +2720,8 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         target_uid = int(call.data.replace("mgmt_hist_pur_", ""))
-        cleanup_old_histories()
-        pur = user_purchases.get(target_uid, [])
+        with state_lock:
+            pur = list(user_purchases.get(target_uid, []))
         txt = "\n".join([p.get("text", "") if isinstance(p, dict) else str(p) for p in pur[-20:]]) or "No purchases yet."
         bot.answer_callback_query(call.id, "Purchase History")
         markup = types.InlineKeyboardMarkup()
@@ -2522,8 +2736,8 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         target_uid = int(call.data.replace("mgmt_hist_dep_", ""))
-        cleanup_old_histories()
-        dep = user_deposits.get(target_uid, [])
+        with state_lock:
+            dep = list(user_deposits.get(target_uid, []))
         txt = "\n".join([d.get("text", "") if isinstance(d, dict) else str(d) for d in dep[-20:]]) or "No deposits yet."
         bot.answer_callback_query(call.id, "Deposit History")
         markup = types.InlineKeyboardMarkup()
@@ -2541,7 +2755,8 @@ def handle_inline_clicks(call):
 
     if call.data.startswith("qty_other_"):
         item_key = call.data.replace("qty_other_", "")
-        user_states[user_id] = f"waiting_for_custom_qty_{item_key}"
+        with state_lock:
+            user_states[user_id] = f"waiting_for_custom_qty_{item_key}"
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, t["enter_custom_qty"])
         return
@@ -2561,7 +2776,8 @@ def handle_inline_clicks(call):
 
     elif call.data.startswith("select_country_"):
         country = call.data.replace("select_country_", "")
-        c_data = product_inventory["Countries"]["items"].get(country, {})
+        with state_lock:
+            c_data = dict(product_inventory["Countries"]["items"].get(country, {}))
         price = c_data.get("price", 1.00)
         c_code = c_data.get("code", "")
         flag = get_country_flag(country, c_code)
@@ -2582,7 +2798,7 @@ def handle_inline_clicks(call):
             [{"text": t["back"], "callback_data": "back_to_products_menu", "style": "primary"}]
         ]
         try:
-            res = requests.post(
+            res = http_session.post(
                 f"https://api.telegram.org/bot{TOKEN}/editMessageText",
                 data={
                     "chat_id": call.message.chat.id,
@@ -2591,7 +2807,7 @@ def handle_inline_clicks(call):
                     "parse_mode": "HTML",
                     "reply_markup": json.dumps({"inline_keyboard": detail_kb})
                 },
-                timeout=15
+                timeout=10
             )
             if res.status_code == 200:
                 return
@@ -2611,7 +2827,8 @@ def handle_inline_clicks(call):
 
     elif call.data.startswith("buy_country_"):
         country = call.data.replace("buy_country_", "")
-        c_data = product_inventory["Countries"]["items"].get(country, {})
+        with state_lock:
+            c_data = dict(product_inventory["Countries"]["items"].get(country, {}))
         clean_name = format_country_display_name(country, c_data.get("names", {}).get(lang_code, country), lang_code)
         bot.answer_callback_query(call.id, clean_name)
         send_colored_quantity_menu(call.message.chat.id, user_id, country, call.message.message_id)
@@ -2620,7 +2837,8 @@ def handle_inline_clicks(call):
     elif call.data == "admin_broadcast_start":
         if not is_admin(user_id):
             return
-        user_states[user_id] = "waiting_for_broadcast_message"
+        with state_lock:
+            user_states[user_id] = "waiting_for_broadcast_message"
         bot.answer_callback_query(call.id, "Broadcast Mode")
         try:
             bot.edit_message_text("📢 Broadcast System\n\nPlease send the message, photo, video or file that you want to send to all users:", call.message.chat.id, call.message.message_id)
@@ -2631,7 +2849,8 @@ def handle_inline_clicks(call):
     elif call.data == "admin_add_country":
         if not is_admin(user_id):
             return
-        user_states[user_id] = "waiting_for_new_country"
+        with state_lock:
+            user_states[user_id] = "waiting_for_new_country"
         bot.answer_callback_query(call.id, "Add Country")
         try:
             bot.edit_message_text("🌍 Enter new country name (e.g., Canada):", call.message.chat.id, call.message.message_id)
@@ -2643,9 +2862,10 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         markup = types.InlineKeyboardMarkup(row_width=1)
-        proto_items = product_inventory.get("Countries", {}).get("items", {})
+        with state_lock:
+            proto_items = list(product_inventory.get("Countries", {}).get("items", {}).items())
         if proto_items:
-            for c_name, c_val in proto_items.items():
+            for c_name, c_val in proto_items:
                 flag = get_country_flag(c_name, c_val.get("code", ""))
                 clean_c = format_country_display_name(c_name, c_name, "en")
                 markup.add(
@@ -2665,8 +2885,9 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         country_name = call.data.replace("admin_edit_price_", "")
-        user_states[user_id] = f"waiting_for_edit_price_{country_name}"
-        current_price = product_inventory["Countries"]["items"].get(country_name, {}).get("price", 1.00)
+        with state_lock:
+            user_states[user_id] = f"waiting_for_edit_price_{country_name}"
+            current_price = product_inventory["Countries"]["items"].get(country_name, {}).get("price", 1.00)
         bot.answer_callback_query(call.id, f"Edit Price {country_name}")
         try:
             bot.edit_message_text(f"💵 Edit Price for {country_name}\n\nCurrent Price: ${current_price:.2f}\n\nPlease send new price (e.g., 1.50 or 2):", call.message.chat.id, call.message.message_id)
@@ -2678,7 +2899,8 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         country_name = call.data.replace("admin_rename_country_", "")
-        user_states[user_id] = f"waiting_for_rename_country_{country_name}"
+        with state_lock:
+            user_states[user_id] = f"waiting_for_rename_country_{country_name}"
         bot.answer_callback_query(call.id, f"Rename {country_name}")
         try:
             bot.edit_message_text(f"✏️ Enter new name for country {country_name}:", call.message.chat.id, call.message.message_id)
@@ -2690,13 +2912,18 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         country_name = call.data.replace("admin_delete_country_", "")
-        proto_items = product_inventory.get("Countries", {}).get("items", {})
-        if country_name in proto_items:
-            del proto_items[country_name]
-            save_inventory()
+        with state_lock:
+            proto_items = product_inventory.get("Countries", {}).get("items", {})
+            deleted = False
+            if country_name in proto_items:
+                del proto_items[country_name]
+                deleted = True
+            remaining_items = list(proto_items.items())
+        if deleted:
+            threading.Thread(target=save_inventory, daemon=True).start()
             bot.answer_callback_query(call.id, f"Deleted {country_name}")
             markup = types.InlineKeyboardMarkup(row_width=1)
-            for c, c_val in proto_items.items():
+            for c, c_val in remaining_items:
                 flag = get_country_flag(c, c_val.get("code", ""))
                 clean_c = format_country_display_name(c, c, "en")
                 markup.add(
@@ -2717,7 +2944,9 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         markup = types.InlineKeyboardMarkup(row_width=1)
-        for c, c_val in product_inventory["Countries"]["items"].items():
+        with state_lock:
+            items_snapshot = list(product_inventory["Countries"]["items"].items())
+        for c, c_val in items_snapshot:
             flag = get_country_flag(c, c_val.get("code", ""))
             clean_c = format_country_display_name(c, c, "en")
             markup.add(types.InlineKeyboardButton(f"🗂️ {flag} {clean_c}", callback_data=f"select_zip_country_{c}"))
@@ -2733,8 +2962,9 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         country_name = call.data.replace("select_zip_country_", "")
-        temp_admin_data[user_id] = country_name
-        user_states[user_id] = "waiting_for_zip_file"
+        with state_lock:
+            temp_admin_data[user_id] = country_name
+            user_states[user_id] = "waiting_for_zip_file"
         bot.answer_callback_query(call.id, country_name)
         try:
             bot.edit_message_text(f"📁 Please send the .zip file for {country_name}:", call.message.chat.id, call.message.message_id)
@@ -2762,14 +2992,16 @@ def handle_inline_clicks(call):
 
     elif call.data.startswith("amt_"):
         if call.data == "amt_other":
-            user_states[user_id] = "waiting_for_custom_amount"
+            with state_lock:
+                user_states[user_id] = "waiting_for_custom_amount"
             bot.answer_callback_query(call.id)
             send_colored_main_menu_back(call.message.chat.id, t["deposit_select_amt"], user_id)
         else:
             try:
                 selected_val = float(call.data.split("_")[1])
-                user_amounts[user_id] = selected_val
-                user_states[user_id] = "waiting_for_payment_method"
+                with state_lock:
+                    user_amounts[user_id] = selected_val
+                    user_states[user_id] = "waiting_for_payment_method"
                 bot.answer_callback_query(call.id)
                 send_colored_payment_methods(call.message.chat.id, user_id, selected_val, call.message.message_id)
             except Exception:
@@ -2777,7 +3009,8 @@ def handle_inline_clicks(call):
         return
 
     elif call.data in ["order_usdt_trc20", "order_usdt_bep20"]:
-        current_amount = user_amounts.get(user_id, 3.00)
+        with state_lock:
+            current_amount = user_amounts.get(user_id, 3.00)
         if current_amount < 3.0:
             bot.answer_callback_query(call.id, t["min_network"], show_alert=True)
             return
@@ -2791,7 +3024,6 @@ def handle_inline_clicks(call):
             currency_type = "USDT · TRC20"
             wallet_address = "TMDf93NV9zM5sAS9mXc5FWmRC5qLbwM4EV"
             network_name = "Tron (TRC20)"
-            net_code = "tron"
         else:
             calculated_val = current_amount * (10.076 / 10.0)
             send_val = f"{calculated_val:.3f} USDT"
@@ -2799,12 +3031,13 @@ def handle_inline_clicks(call):
             currency_type = "USDT · BEP20"
             wallet_address = "0x4388fd8ff1278b4d9ddfc770875a731379a061b6"
             network_name = "BNB Smart Chain (BEP20)"
-            net_code = "bsc"
 
-        temp_admin_data[f"order_temp_{user_id}"] = {"order_id": order_id, "method": currency_type}
-        deposit_text = f"Order: {order_id} | Amt: ${current_amount:.2f} ({currency_type}) | Time: {current_time}"
-        user_deposits.setdefault(user_id, []).append({"text": deposit_text, "timestamp": time.time()})
-        save_user_data(user_id)
+        with state_lock:
+            temp_admin_data[f"order_temp_{user_id}"] = {"order_id": order_id, "method": currency_type}
+            deposit_text = f"Order: {order_id} | Amt: ${current_amount:.2f} ({currency_type}) | Time: {current_time}"
+            user_deposits.setdefault(user_id, []).append({"text": deposit_text, "timestamp": time.time()})
+
+        threading.Thread(target=save_user_data, args=(user_id,), daemon=True).start()
 
         order_text = t["order_box"].format(
             currency=currency_type,
@@ -2828,14 +3061,16 @@ def handle_inline_clicks(call):
 
     elif call.data in ["go_main_menu", "dep_cancel"]:
         bot.answer_callback_query(call.id)
-        user_states.pop(user_id, None)
+        with state_lock:
+            user_states.pop(user_id, None)
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         send_welcome(call.message)
 
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     print(f"Webhook Bot is running on port {port}...")
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, threaded=True)
