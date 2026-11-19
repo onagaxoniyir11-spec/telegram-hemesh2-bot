@@ -26,7 +26,7 @@ FIREBASE_URL = FIREBASE_URL.rstrip("/")
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 # Support Username & Admin IDs
-support_admin_username = "@soeminhtun101"
+support_admin_username = "@proxyvpnservice17"
 ADMIN_IDS = [8138758919]
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "N1010")
 
@@ -229,7 +229,7 @@ def webhook():
 # --------------------------------------------------------------------------
 
 DEFAULT_DATABASE = {
-    "support_admin": "@soeminhtun101",
+    "support_admin": "@proxyvpnservice17",
     "product_inventory": {
         "Countries": {
             "type": "countries",
