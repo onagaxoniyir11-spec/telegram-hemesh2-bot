@@ -28,7 +28,7 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 # Support Username & Admin IDs
 support_admin_username = "@proxyvpnservice17"
 ADMIN_IDS = [8138758919]
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "N1010")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "H101010")
 
 # In-memory Database & State Management
 user_amounts = {}
@@ -735,7 +735,7 @@ LANG = {
         "menu_account": "👤 个人中心",
         "menu_deposit": "🪙 账户充值",
         "menu_support": "📞 联系客服",
-        "menu_lang": "🌐 Language",
+        "menu_lang": "🌐 语言设置",
         "menu_rules": "⚠️ 规则说明",
         "menu_admin": "🛠️ 管理面板",
         "select_qty": "🔢 选择数量：\n\n请选择您要购买的数量：",
