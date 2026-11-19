@@ -508,7 +508,15 @@ LANG = {
         "stock": "Stock",
         "price": "Price",
         "purchase_success": "✅ Purchase Successful!",
-        "insufficient_stock": "❌ Insufficient stock! Available stock: {stock} items.",
+        "insufficient_stock": (
+            "╔══════════════════════╗\n"
+            "   ⚠️ <b>INSUFFICIENT STOCK</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📦 <b>Available Stock:</b> <code>{stock}</code> pcs\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "😔 <i>Sorry, this country is currently out of stock or has fewer items than requested.</i>\n\n"
+            "💡 <i>Please select another country or contact support for restock updates.</i>"
+        ),
         "insufficient_balance": "❌ Insufficient balance!\nRequired: ${required:.2f}\nYour Balance: ${balance:.2f}\nPlease deposit first.",
         "balance_text": "Remaining Balance:",
         "deposit_select_amt": "Enter custom deposit amount (USDT, Min $3):",
@@ -655,7 +663,15 @@ LANG = {
         "stock": "库存",
         "price": "价格",
         "purchase_success": "✅ 购买成功！",
-        "insufficient_stock": "❌ 库存不足！可用库存：{stock} 件。",
+        "insufficient_stock": (
+            "╔══════════════════════╗\n"
+            "   ⚠️ <b>商品库存不足</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📦 <b>当前可用库存:</b> <code>{stock}</code> 件\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "😔 <i>抱歉，该国家当前库存不足或已售罄。</i>\n\n"
+            "💡 <i>请选择其他国家或联系客服了解补货时间。</i>"
+        ),
         "insufficient_balance": "❌ 余额不足！\n需要：${required:.2f}\n当前余额：${balance:.2f}\n请先进行充值。",
         "balance_text": "剩余余额：",
         "deposit_select_amt": "请输入自定义充值金额 (USDT，最低 $3)：",
@@ -1055,6 +1071,49 @@ def send_colored_rules_menu(chat_id, user_id, message_id=None):
         except Exception:
             pass
     bot.send_message(chat_id, rules_msg, parse_mode="HTML", reply_markup=markup)
+
+def send_colored_insufficient_stock(chat_id, user_id, stock_count):
+    """
+    Sends a premium HTML Insufficient Stock card with multi-color inline action buttons.
+    """
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    msg_text = t["insufficient_stock"].format(stock=stock_count)
+
+    inline_keyboard = [
+        [
+            {"text": t["menu_products"], "callback_data": "menu_products", "style": "success"},
+            {"text": t["menu_support"], "callback_data": "menu_support", "style": "danger"}
+        ],
+        [
+            {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+        ]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": msg_text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored insufficient stock warning: {e}")
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products"),
+        types.InlineKeyboardButton(t["menu_support"], callback_data="menu_support")
+    )
+    markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
+    bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=markup)
 
 def get_products_countries_keyboard(user_id):
     lang_code = get_lang(user_id)
@@ -1629,7 +1688,7 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
     zip_total_files = sum(len(zf.get("extracted_files", [])) for zf in zip_list)
     total_stock = len(accounts_list) + zip_total_files
     if total_stock < qty:
-        bot.send_message(chat_id, t["insufficient_stock"].format(stock=total_stock), reply_markup=get_main_menu_inline_back(user_id))
+        send_colored_insufficient_stock(chat_id, user_id, total_stock)
         return
 
     total_price = round(price_per_unit * qty, 2)
