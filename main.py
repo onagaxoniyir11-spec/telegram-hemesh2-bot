@@ -566,26 +566,32 @@ def is_admin(user_id):
 LANG = {
     "en": {
         "welcome": (
-            "🌈 Welcome to Soe Min’s Shop!\n"
-            "Your trusted marketplace for Telegram Accounts (Session+Json/TData).\n\n"
-            "📦 Available Services\n"
-            "• Telegram Accounts (Session+Json/TData)\n"
-            "• Wholesale & Retail\n"
-            "• Instant Delivery\n"
-            "• Automatic Balance & Order System\n\n"
-            "📖 How to Use\n"
-            "1️⃣ Use /start to open the main menu.\n"
-            "2️⃣ Recharge your balance.\n"
-            "3️⃣ Browse available products.\n"
-            "4️⃣ Complete your purchase and receive your files instantly.\n\n"
-            "⚠️ Important\n"
-            "• Please place a small test order before making bulk purchases.\n"
-            "• Check your order immediately after delivery.\n"
-            "• Contact support as soon as possible if you experience any issues.\n\n"
-            "👨‍💻 Support: {support_user}\n\n"
-            "📦 Stock: Use /stock to view the latest available products and inventory.\n\n"
-            "🚀 Thank you for choosing Soe Min’s Shop!\n"
-            "💙 We wish you successful business!"
+            "╔══════════════════════╗\n"
+            "   ✨ <b>@GmailsFarmar_bot</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💎 <i>Your trusted marketplace for Telegram Accounts (Session+Json/TData).</i>\n\n"
+            "📦 <b>AVAILABLE SERVICES</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔹 <b>Format:</b> Session+Json / TData\n"
+            "🔹 <b>Scale:</b> Wholesale &amp; Retail\n"
+            "🔹 <b>Speed:</b> Instant Automated Delivery\n"
+            "🔹 <b>System:</b> Auto Balance &amp; Order Flow\n\n"
+            "📖 <b>QUICK GUIDE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1️⃣ Send /start to open the main menu.\n"
+            "2️⃣ Recharge your wallet balance.\n"
+            "3️⃣ Browse countries &amp; live stock.\n"
+            "4️⃣ Buy &amp; receive files immediately.\n\n"
+            "⚠️ <b>IMPORTANT NOTICE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔸 <i>Test with a small order before bulk buying.</i>\n"
+            "🔸 <i>Verify your order right after delivery.</i>\n"
+            "🔸 <i>Report any issue to support promptly.</i>\n\n"
+            "👨‍💻 <b>Support:</b> {support_user}\n"
+            "📊 <b>Live Stock:</b> Use /stock anytime\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🚀 <i>Thank you for choosing <b>@GmailsFarmar_bot</b>!</i>\n"
+            "💙 <i>Wishing you smooth &amp; profitable business!</i>"
         ),
         "products": (
             "✨ <b>AVAILABLE COUNTRIES & STOCK</b> ✨\n"
@@ -807,26 +813,32 @@ LANG = {
     },
     "zh": {
         "welcome": (
-            "🌈 欢迎来到 Soe Min’s Shop！\n"
-            "您值得信赖的 Telegram 账号 (Session+Json/TData) 交易平台。\n\n"
-            "📦 提供服务\n"
-            "• Telegram 账号 (Session+Json/TData)\n"
-            "• 批发与零售\n"
-            "• 自动即时发货\n"
-            "• 自动余额与订单系统\n\n"
-            "📖 使用指南\n"
+            "╔══════════════════════╗\n"
+            "   ✨ <b>@GmailsFarmar_bot</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💎 <i>您值得信赖的 Telegram 账号 (Session+Json/TData) 交易中心。</i>\n\n"
+            "📦 <b>核心服务</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔹 <b>账号格式：</b> Session+Json / TData\n"
+            "🔹 <b>供货模式：</b> 批发与零售兼营\n"
+            "🔹 <b>发货速度：</b> 全自动秒级发货\n"
+            "🔹 <b>交易系统：</b> 自动余额与订单管理\n\n"
+            "📖 <b>使用流程</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
             "1️⃣ 发送 /start 打开主菜单。\n"
-            "2️⃣ 为您的账户充值余额。\n"
-            "3️⃣ 浏览并选择可用商品。\n"
-            "4️⃣ 完成购买并立即获取文件。\n\n"
-            "⚠️ 重要提示\n"
-            "• 大批量购买前请先小额测试下单。\n"
-            "• 收货后请立即检查您的订单。\n"
-            "• 如遇任何问题，请尽快联系客服。\n\n"
-            "👨‍💻 客服支持：{support_user}\n\n"
-            "📦 库存查询：发送 /stock 查看最新可用商品及库存。\n\n"
-            "🚀 感谢选择 Soe Min’s Shop！\n"
-            "💙 祝您生意兴隆！"
+            "2️⃣ 为您的钱包充值余额。\n"
+            "3️⃣ 浏览国家列表与实时库存。\n"
+            "4️⃣ 下单后立即获取对应文件。\n\n"
+            "⚠️ <b>重要提醒</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔸 <i>大批量采购前请先小额测试下单。</i>\n"
+            "🔸 <i>收货后请立即检查并验证账号。</i>\n"
+            "🔸 <i>如遇问题请尽快联系客服处理。</i>\n\n"
+            "👨‍💻 <b>官方客服：</b> {support_user}\n"
+            "📊 <b>实时库存：</b> 随时发送 /stock 查看\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🚀 <i>感谢选择 <b>@GmailsFarmar_bot</b>！</i>\n"
+            "💙 <i>祝您财源广进、生意兴隆！</i>"
         ),
         "products": (
             "✨ <b>可用国家与实时库存</b> ✨\n"
@@ -1103,6 +1115,7 @@ def send_colored_main_menu(chat_id, text, user_id):
     payload = {
         "chat_id": chat_id,
         "text": text,
+        "parse_mode": "HTML",
         "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
     }
     try:
@@ -1123,7 +1136,7 @@ def send_colored_main_menu(chat_id, text, user_id):
     )
     if is_admin(user_id):
         markup.add(types.InlineKeyboardButton(t["menu_admin"], callback_data="menu_admin"))
-    bot.send_message(chat_id, text, reply_markup=markup)
+    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
 
 def get_main_menu_inline_back(user_id):
