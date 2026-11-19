@@ -425,7 +425,19 @@ LANG = {
         "account": "◆ PERSONAL CENTER / ACCOUNT\n────────────────────────\nUser ID: {user_id}\nUsername: {username}\nBalance: ${balance:.2f}\nPurchased: {purchased_total}",
         "deposit": "Select amount (USDT):",
         "support": "📞 Contact Customer Service\n\nFor any help, issues or assistance, please contact our customer service admin:\n👉 {support_user}",
-        "rules": "⚠️ Platform Rules & Notice\n────────────────────────\n1. All digital products are checked before delivery.\n2. Please verify your account immediately after purchase.\n3. Deposits are non-refundable once credited to your balance.\n4. Always send the exact USDT amount on the selected network.\n5. For any issues, contact customer service: {support_user}",
+        "rules": (
+            "⚠️ Platform Rules & Notice\n"
+            "────────────────────────\n"
+            "1. All digital products are checked before delivery.\n"
+            "2. Please verify your account immediately after purchase.\n"
+            "3. Deposits are non-refundable once credited to your balance.\n"
+            "4. Always send the exact USDT amount on the selected network.\n"
+            "5. For any issues, contact customer service: {support_user}\n\n"
+            "Precautions\n"
+            "• Only lawful digital items.\n"
+            "• Obey local laws & platform terms.\n"
+            "• Download zip immediately."
+        ),
         "language": "🌐 Language Settings\n\nPlease click the button below to switch language:",
         "admin": "🛠️ Welcome to Admin Panel\n\nChoose an option below:",
         "menu_products": "🛒 Products",
@@ -493,7 +505,19 @@ LANG = {
         "account": "◆ 个人中心 / 账户信息\n────────────────────────\n用户 ID: {user_id}\n用户名: {username}\n余额: ${balance:.2f}\n已购总额: {purchased_total}",
         "deposit": "请选择充值金额 (USDT)：",
         "support": "📞 联系客服\n\n如有任何帮助、问题或协助，请直接联系我们的客服管理员：\n👉 {support_user}",
-        "rules": "⚠️ 平台规则与须知\n────────────────────────\n1. 所有数字商品在发货前均经过严格检测。\n2. 购买后请立即检查并验证您的账户。\n3. 充值金额一旦入账至您的余额，恕不退款。\n4. 请务必在所选网络上转账准确的 USDT 金额。\n5. 如有任何问题，请联系客服：{support_user}",
+        "rules": (
+            "⚠️ 平台规则与须知\n"
+            "────────────────────────\n"
+            "1. 所有数字商品在发货前均经过严格检测。\n"
+            "2. 购买后请立即检查并验证您的账户。\n"
+            "3. 充值金额一旦入账至您的余额，恕不退款。\n"
+            "4. 请务必在所选网络上转账准确的 USDT 金额。\n"
+            "5. 如有任何问题，请联系客服：{support_user}\n\n"
+            "注意事项 (Precautions)\n"
+            "• 仅限合法数字商品。\n"
+            "• 遵守当地法律及平台条款。\n"
+            "• 购买后请立即下载压缩包 (ZIP)。"
+        ),
         "language": "🌐 语言设置\n\n请点击下方按钮切换语言：",
         "admin": "🛠️ 欢迎来到管理面板\n\n在下方选择一个选项：",
         "menu_products": "🛒 产品中心",
