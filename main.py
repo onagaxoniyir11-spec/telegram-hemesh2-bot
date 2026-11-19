@@ -423,7 +423,14 @@ LANG = {
         "welcome": "📍 Main Menu\n👋 Hello {user_name}!\n\nWelcome to Telegram Bot!\n\nMain Features:\n• Personal Center - Manage your account\n• Products - Browse and buy products\n• Recharge - Multiple payment methods\n• Contact Customer Service: {support_user} - 24/7 online service\n• Language - Language settings\n• Rules - Platform terms & usage rules\n\nTips:\nClick the buttons below to access features!",
         "products": "📁 Select a country:",
         "account": "◆ PERSONAL CENTER / ACCOUNT\n────────────────────────\nUser ID: {user_id}\nUsername: {username}\nBalance: ${balance:.2f}\nPurchased: {purchased_total}",
-        "deposit": "Select amount (USDT):",
+        "deposit": (
+            "💰 Please select your recharge amount below.\n\n"
+            "✅ Please make sure to pay the exact amount shown on your invoice.\n\n"
+            "💳 Available Payment Methods:\n\n"
+            "• 🔗 USDT (TRC20)\n"
+            "• 🔗 USDT (BEP20)\n\n"
+            "After selecting your recharge amount, choose your preferred payment method to continue."
+        ),
         "support": "📞 Contact Customer Service\n\nFor any help, issues or assistance, please contact our customer service admin:\n👉 {support_user}",
         "rules": (
             "⚠️ Platform Rules & Notice\n"
@@ -503,7 +510,14 @@ LANG = {
         "welcome": "📍 主菜单\n👋 你好 {user_name}！\n\n欢迎使用电报机器人！\n\n主要功能：\n• 个人中心 - 管理您的账户\n• 产品中心 - 浏览并购买产品\n• 账户充值 - 多种支付方式\n• 联系客服：{support_user} - 7/24在线服务\n• 语言设置 - 切换语言选项\n• 规则说明 - 平台使用条款与规则\n\n提示：\n点击下方按钮访问各项功能！",
         "products": "📁 选择国家：",
         "account": "◆ 个人中心 / 账户信息\n────────────────────────\n用户 ID: {user_id}\n用户名: {username}\n余额: ${balance:.2f}\n已购总额: {purchased_total}",
-        "deposit": "请选择充值金额 (USDT)：",
+        "deposit": (
+            "💰 请在下方选择您的充值金额。\n\n"
+            "✅ 请务必支付订单上显示的准确金额。\n\n"
+            "💳 可用支付方式：\n\n"
+            "• 🔗 USDT (TRC20)\n"
+            "• 🔗 USDT (BEP20)\n\n"
+            "选择充值金额后，请选择您的首选支付方式继续。"
+        ),
         "support": "📞 联系客服\n\n如有任何帮助、问题或协助，请直接联系我们的客服管理员：\n👉 {support_user}",
         "rules": (
             "⚠️ 平台规则与须知\n"
