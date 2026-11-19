@@ -26,7 +26,7 @@ FIREBASE_URL = FIREBASE_URL.rstrip("/")
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 # Support Username & Admin IDs
-support_admin_username = "@proxyvpnservice17"
+support_admin_username = "@soeminhtun101"
 ADMIN_IDS = [8138758919]
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "N1010")
 
@@ -229,7 +229,7 @@ def webhook():
 # --------------------------------------------------------------------------
 
 DEFAULT_DATABASE = {
-    "support_admin": "@proxyvpnservice17",
+    "support_admin": "@soeminhtun101",
     "product_inventory": {
         "Countries": {
             "type": "countries",
@@ -398,7 +398,10 @@ load_data_from_firebase()
 
 def setup_bot_startup():
     try:
-        commands = [telebot.types.BotCommand("/start", "Re-start Bot & Open Menu")]
+        commands = [
+            telebot.types.BotCommand("/start", "Re-start Bot & Open Menu"),
+            telebot.types.BotCommand("/stock", "View Available Products & Stock")
+        ]
         bot.set_my_commands(commands)
         if RENDER_URL:
             clean_render_url = RENDER_URL.rstrip("/")
@@ -420,7 +423,28 @@ def is_admin(user_id):
 
 LANG = {
     "en": {
-        "welcome": "📍 Main Menu\n👋 Hello {user_name}!\n\nWelcome to Telegram Bot!\n\nMain Features:\n• Personal Center - Manage your account\n• Products - Browse and buy products\n• Recharge - Multiple payment methods\n• Contact Customer Service: {support_user} - 24/7 online service\n• Language - Language settings\n• Rules - Platform terms & usage rules\n\nTips:\nClick the buttons below to access features!",
+        "welcome": (
+            "🌈 Welcome to Soe Min’s Shop!\n"
+            "Your trusted marketplace for Telegram Accounts (Session+Json/TData).\n\n"
+            "📦 Available Services\n"
+            "• Telegram Accounts (Session+Json/TData)\n"
+            "• Wholesale & Retail\n"
+            "• Instant Delivery\n"
+            "• Automatic Balance & Order System\n\n"
+            "📖 How to Use\n"
+            "1️⃣ Use /start to open the main menu.\n"
+            "2️⃣ Recharge your balance.\n"
+            "3️⃣ Browse available products.\n"
+            "4️⃣ Complete your purchase and receive your files instantly.\n\n"
+            "⚠️ Important\n"
+            "• Please place a small test order before making bulk purchases.\n"
+            "• Check your order immediately after delivery.\n"
+            "• Contact support as soon as possible if you experience any issues.\n\n"
+            "👨‍💻 Support: {support_user}\n\n"
+            "📦 Stock: Use /stock to view the latest available products and inventory.\n\n"
+            "🚀 Thank you for choosing Soe Min’s Shop!\n"
+            "💙 We wish you successful business!"
+        ),
         "products": "📁 Select a country:",
         "account": "◆ PERSONAL CENTER / ACCOUNT\n────────────────────────\nUser ID: {user_id}\nUsername: {username}\nBalance: ${balance:.2f}\nPurchased: {purchased_total}",
         "deposit": (
@@ -507,7 +531,28 @@ LANG = {
         )
     },
     "zh": {
-        "welcome": "📍 主菜单\n👋 你好 {user_name}！\n\n欢迎使用电报机器人！\n\n主要功能：\n• 个人中心 - 管理您的账户\n• 产品中心 - 浏览并购买产品\n• 账户充值 - 多种支付方式\n• 联系客服：{support_user} - 7/24在线服务\n• 语言设置 - 切换语言选项\n• 规则说明 - 平台使用条款与规则\n\n提示：\n点击下方按钮访问各项功能！",
+        "welcome": (
+            "🌈 欢迎来到 Soe Min’s Shop！\n"
+            "您值得信赖的 Telegram 账号 (Session+Json/TData) 交易平台。\n\n"
+            "📦 提供服务\n"
+            "• Telegram 账号 (Session+Json/TData)\n"
+            "• 批发与零售\n"
+            "• 自动即时发货\n"
+            "• 自动余额与订单系统\n\n"
+            "📖 使用指南\n"
+            "1️⃣ 发送 /start 打开主菜单。\n"
+            "2️⃣ 为您的账户充值余额。\n"
+            "3️⃣ 浏览并选择可用商品。\n"
+            "4️⃣ 完成购买并立即获取文件。\n\n"
+            "⚠️ 重要提示\n"
+            "• 大批量购买前请先小额测试下单。\n"
+            "• 收货后请立即检查您的订单。\n"
+            "• 如遇任何问题，请尽快联系客服。\n\n"
+            "👨‍💻 客服支持：{support_user}\n\n"
+            "📦 库存查询：发送 /stock 查看最新可用商品及库存。\n\n"
+            "🚀 感谢选择 Soe Min’s Shop！\n"
+            "💙 祝您生意兴隆！"
+        ),
         "products": "📁 选择国家：",
         "account": "◆ 个人中心 / 账户信息\n────────────────────────\n用户 ID: {user_id}\n用户名: {username}\n余额: ${balance:.2f}\n已购总额: {purchased_total}",
         "deposit": (
@@ -828,11 +873,16 @@ def send_welcome(message):
     user_states.pop(user_id, None)
     ensure_user_registered(user_id)
     lang_code = get_lang(user_id)
-    default_user = "用户" if lang_code == "zh" else "User"
-    first_name = getattr(message.from_user, 'first_name', None) if hasattr(message, 'from_user') else None
-    user_name = first_name or default_user
-    welcome_text = LANG[lang_code]["welcome"].format(user_name=user_name, support_user=support_admin_username)
+    welcome_text = LANG[lang_code]["welcome"].format(support_user=support_admin_username)
     send_colored_main_menu(message.chat.id, welcome_text, user_id)
+
+@bot.message_handler(commands=['stock'])
+def stock_command(message):
+    user_id = message.from_user.id
+    user_states.pop(user_id, None)
+    ensure_user_registered(user_id)
+    t = LANG[get_lang(user_id)]
+    bot.send_message(message.chat.id, t["products"], reply_markup=get_products_countries_keyboard(user_id))
 
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
