@@ -13,7 +13,7 @@ import queue
 import requests
 from flask import Flask, request
 
-# Load credentials
+# Load credentials (Uses provided Token as default if BOT_TOKEN env var is not set)
 TOKEN = os.environ.get("BOT_TOKEN", "8908618066:AAFbWasMZ1pyrYisSFRoGYY1VFTVEjFK7jE")
 FIREBASE_URL = os.environ.get("FIREBASE_URL")
 RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
@@ -25,7 +25,7 @@ if not FIREBASE_URL:
 
 FIREBASE_URL = FIREBASE_URL.rstrip("/")
 
-# Enable threads so concurrent users do not block each other
+# Enable multi-threading so concurrent users do not block each other
 bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=16)
 
 # Persistent HTTP session for faster Firebase & Telegram API calls
@@ -39,7 +39,7 @@ state_lock = threading.RLock()
 purchase_lock = threading.Lock()
 deposit_lock = threading.Lock()
 
-# Background update queue for instant webhook ACK
+# Background update queue for fast webhook ACK
 update_queue = queue.Queue(maxsize=5000)
 
 # Support Username & Admin IDs
@@ -662,7 +662,16 @@ LANG = {
             "😔 <i>Sorry, this country is currently out of stock or has fewer items than requested.</i>\n\n"
             "💡 <i>Please select another country or contact support for restock updates.</i>"
         ),
-        "insufficient_balance": "❌ Insufficient balance!\nRequired: ${required:.2f}\nYour Balance: ${balance:.2f}\nPlease deposit first.",
+        "insufficient_balance": (
+            "╔══════════════════════╗\n"
+            "   💳 <b>INSUFFICIENT BALANCE</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💵 <b>Required Amount:</b> <code>${required:.2f}</code>\n"
+            "💰 <b>Current Balance:</b> <code>${balance:.2f}</code>\n"
+            "📉 <b>Shortage:</b> <code>${shortage:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💎 <i>Please recharge your wallet to complete this order.</i>"
+        ),
         "deposit_select_amt": (
             "╔══════════════════════╗\n"
             "   ✏️ <b>CUSTOM RECHARGE</b>\n"
@@ -894,7 +903,16 @@ LANG = {
             "😔 <i>抱歉，该国家当前库存不足或已售罄。</i>\n\n"
             "💡 <i>请选择其他国家或联系客服了解补货时间。</i>"
         ),
-        "insufficient_balance": "❌ 余额不足！\n需要：${required:.2f}\n当前余额：${balance:.2f}\n请先进行充值。",
+        "insufficient_balance": (
+            "╔══════════════════════╗\n"
+            "   💳 <b>账户余额不足</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💵 <b>订单所需金额：</b> <code>${required:.2f}</code>\n"
+            "💰 <b>当前可用余额：</b> <code>${balance:.2f}</code>\n"
+            "📉 <b>尚差金额：</b> <code>${shortage:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💎 <i>请先充值余额后再完成购买。</i>"
+        ),
         "balance_text": "剩余余额：",
         "deposit_select_amt": (
             "╔══════════════════════╗\n"
@@ -1137,6 +1155,47 @@ def send_colored_main_menu_back(chat_id, text, user_id):
         print(f"Colored back menu warning: {e}")
 
     bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=get_main_menu_inline_back(user_id))
+
+
+def send_colored_insufficient_balance(chat_id, user_id, required_amount, current_balance):
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    shortage = round(max(0.0, required_amount - current_balance), 2)
+    msg_text = t["insufficient_balance"].format(
+        required=required_amount,
+        balance=current_balance,
+        shortage=shortage
+    )
+
+    inline_keyboard = [
+        [
+            {"text": t["menu_deposit"], "callback_data": "menu_deposit", "style": "success"},
+            {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+        ]
+    ]
+
+    try:
+        res = http_session.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": msg_text,
+                "parse_mode": "HTML",
+                "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
+            },
+            timeout=10
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored insufficient balance warning: {e}")
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton(t["menu_deposit"], callback_data="menu_deposit"),
+        types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu")
+    )
+    bot.send_message(chat_id, msg_text, parse_mode="HTML", reply_markup=markup)
 
 
 def send_colored_deposit_status(target_uid, text, accepted=True):
@@ -2334,18 +2393,13 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
             total_price = round(price_per_unit * qty, 2)
             user_balance = user_balances.get(user_id, 0.00)
             if user_balance < total_price:
-                send_colored_main_menu_back(
-                    chat_id,
-                    t["insufficient_balance"].format(required=total_price, balance=user_balance),
-                    user_id
-                )
+                send_colored_insufficient_balance(chat_id, user_id, total_price, user_balance)
                 return
 
             flag = get_country_flag(item_key, c_data.get("code", ""))
             display_country_name = format_country_display_name(item_key, c_data.get("names", {}).get(lang_code, item_key), lang_code)
             clean_en_name = format_country_display_name(item_key, item_key, "en")
 
-            # Prepare items to deliver atomically under lock
             items_to_deliver = []
             try:
                 for _ in range(qty):
@@ -2406,7 +2460,6 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
                 bot.send_message(chat_id, t["deliver_err"].format(err=str(e)))
                 return
 
-    # Send files/messages outside lock so other users aren't blocked during upload
     for entry in items_to_deliver:
         try:
             if entry["kind"] == "zip":
