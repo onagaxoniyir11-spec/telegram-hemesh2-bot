@@ -497,7 +497,7 @@ LANG = {
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "✨ <i>Thank you for following our community rules!</i>"
         ),
-        "language": "🌐 Language Settings\n\nPlease click the button below to switch language:",
+        "language": "🌐 Language switched to English!",
         "admin": "🛠️ Welcome to Admin Panel\n\nChoose an option below:",
         "menu_products": "🛒 Products",
         "menu_account": "👤 Personal Center",
@@ -526,7 +526,6 @@ LANG = {
             "💡 <i>Please select another country or contact support for restock updates.</i>"
         ),
         "insufficient_balance": "❌ Insufficient balance!\nRequired: ${required:.2f}\nYour Balance: ${balance:.2f}\nPlease deposit first.",
-        "balance_text": "Remaining Balance:",
         "deposit_select_amt": (
             "╔══════════════════════╗\n"
             "   ✏️ <b>CUSTOM RECHARGE</b>\n"
@@ -730,13 +729,13 @@ LANG = {
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "✨ <i>感谢您遵守平台使用规范！</i>"
         ),
-        "language": "🌐 语言设置\n\n请点击下方按钮切换语言：",
+        "language": "🌐 语言已切换为中文！",
         "admin": "🛠️ 欢迎来到管理面板\n\n在下方选择一个选项：",
         "menu_products": "🛒 产品中心",
         "menu_account": "👤 个人中心",
         "menu_deposit": "🪙 账户充值",
         "menu_support": "📞 联系客服",
-        "menu_lang": "🌐 语言设置",
+        "menu_lang": "🌐 Language",
         "menu_rules": "⚠️ 规则说明",
         "menu_admin": "🛠️ 管理面板",
         "select_qty": "🔢 选择数量：\n\n请选择您要购买的数量：",
@@ -897,6 +896,17 @@ LANG = {
 
 def get_lang(user_id):
     return user_languages.get(user_id, "en")
+
+def toggle_user_language(user_id):
+    current_lang = user_languages.get(user_id, "en")
+    if current_lang == "en":
+        user_languages[user_id] = "zh"
+        alert_text = "语言已成功切换为中文！"
+    else:
+        user_languages[user_id] = "en"
+        alert_text = "Language successfully changed to English!"
+    save_user_data(user_id)
+    return alert_text
 
 def remove_old_reply_keyboard(chat_id):
     try:
@@ -1731,7 +1741,7 @@ def handle_all_messages(message):
     is_account = text in [LANG["en"]["menu_account"], LANG["zh"]["menu_account"]]
     is_deposit = text in [LANG["en"]["menu_deposit"], LANG["zh"]["menu_deposit"], "💰 Recharge", "💰 账户充值"]
     is_support = text in [LANG["en"]["menu_support"], LANG["zh"]["menu_support"], "💬 Contact Customer Service", "💬 联系客服"]
-    is_lang = text in [LANG["en"]["menu_lang"], LANG["zh"]["menu_lang"]]
+    is_lang = text in [LANG["en"]["menu_lang"], LANG["zh"]["menu_lang"], "🌐 Language", "🌐 语言设置"]
     is_rules = text in [LANG["en"]["menu_rules"], LANG["zh"]["menu_rules"]]
     is_admin_menu = text in [LANG["en"]["menu_admin"], LANG["zh"]["menu_admin"]]
 
@@ -1740,7 +1750,10 @@ def handle_all_messages(message):
         remove_old_reply_keyboard(message.chat.id)
 
         if is_lang:
-            bot.send_message(message.chat.id, t["language"], reply_markup=get_language_keyboard(user_id))
+            toggle_user_language(user_id)
+            new_lang_code = get_lang(user_id)
+            welcome_text = LANG[new_lang_code]["welcome"].format(support_user=support_admin_username)
+            send_colored_main_menu(message.chat.id, welcome_text, user_id)
             return
         elif is_admin_menu:
             if not is_admin(user_id):
@@ -2195,12 +2208,17 @@ def handle_inline_clicks(call):
         send_colored_account_menu(call.message.chat.id, call.from_user, user_id, call.message.message_id)
         return
 
-    if call.data == "menu_lang":
-        bot.answer_callback_query(call.id)
+    if call.data in ["menu_lang", "lang_toggle"]:
+        user_states.pop(user_id, None)
+        alert_text = toggle_user_language(user_id)
+        bot.answer_callback_query(call.id, alert_text)
+        new_lang_code = get_lang(user_id)
+        welcome_text = LANG[new_lang_code]["welcome"].format(support_user=support_admin_username)
         try:
-            bot.edit_message_text(t["language"], call.message.chat.id, call.message.message_id, reply_markup=get_language_keyboard(user_id))
+            bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
-            bot.send_message(call.message.chat.id, t["language"], reply_markup=get_language_keyboard(user_id))
+            pass
+        send_colored_main_menu(call.message.chat.id, welcome_text, user_id)
         return
 
     if call.data == "menu_rules":
@@ -2443,24 +2461,6 @@ def handle_inline_clicks(call):
             bot.edit_message_text(f"💰 Deposit History - {target_uid}\n──────────────────────\n{txt}", call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
             pass
-        return
-
-    if call.data == "lang_toggle":
-        current_lang = user_languages.get(user_id, "en")
-        if current_lang == "en":
-            user_languages[user_id] = "zh"
-            alert_text = "语言已成功切换为中文！"
-        else:
-            user_languages[user_id] = "en"
-            alert_text = "Language successfully changed to English!"
-
-        save_user_data(user_id)
-        bot.answer_callback_query(call.id, alert_text)
-        try:
-            bot.delete_message(call.message.chat.id, call.message.message_id)
-        except Exception:
-            pass
-        send_welcome(call.message)
         return
 
     if call.data == "back_to_account":
