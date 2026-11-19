@@ -462,12 +462,15 @@ LANG = {
             "✨ <i>Manage your balance & orders below:</i>"
         ),
         "deposit": (
-            "💰 Please select your recharge amount below.\n\n"
-            "✅ Please make sure to pay the exact amount shown on your invoice.\n\n"
-            "💳 Available Payment Methods:\n\n"
-            "• 🔗 USDT (TRC20)\n"
-            "• 🔗 USDT (BEP20)\n\n"
-            "After selecting your recharge amount, choose your preferred payment method to continue."
+            "╔══════════════════════╗\n"
+            "   💰 <b>RECHARGE BALANCE</b>\n"
+            "╚══════════════════════╝\n\n"
+            "✅ <i>Please make sure to pay the exact amount shown on your invoice.</i>\n\n"
+            "💳 <b>Available Payment Methods:</b>\n"
+            "• 🔗 <b>USDT (TRC20)</b> — Min <code>$3.00</code>\n"
+            "• 🔗 <b>USDT (BEP20)</b> — Min <code>$3.00</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>Select your recharge amount below, then choose a payment network:</i>"
         ),
         "support": "👉 {support_user}",
         "rules": (
@@ -502,7 +505,7 @@ LANG = {
         "select_country": "🌍 Select a country & phone code:",
         "back": "< Back",
         "main_menu": "< Main Menu",
-        "other_amt": "Other Amount",
+        "other_amt": "✏️ Other Amount",
         "other_qty": "✏️ Other Quantity",
         "cancel": "< Cancel",
         "stock": "Stock",
@@ -519,16 +522,46 @@ LANG = {
         ),
         "insufficient_balance": "❌ Insufficient balance!\nRequired: ${required:.2f}\nYour Balance: ${balance:.2f}\nPlease deposit first.",
         "balance_text": "Remaining Balance:",
-        "deposit_select_amt": "Enter custom deposit amount (USDT, Min $3):",
+        "deposit_select_amt": (
+            "╔══════════════════════╗\n"
+            "   ✏️ <b>CUSTOM RECHARGE</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💵 <b>Minimum Deposit:</b> <code>$3.00 USDT</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>Enter your desired deposit amount (e.g., 3, 15, 25):</i>"
+        ),
         "min_network": "❌ Minimum deposit for this network is $3.00!",
         "min_deposit_err": "❌ Minimum deposit amount is ${min_limit:.2f}. Please enter again:",
         "invalid_amount": "❌ Invalid amount. Please enter a valid number (e.g., 3 or 10):",
-        "selected_amount_pay": "💰 Selected Amount: ${amount:.2f}\n\nPlease select your preferred payment method:",
-        "pay_trc20": "💵 USDT (TRC20) (Min $3)",
-        "pay_bep20": "💵 USDT (BEP20) (Min $3)",
+        "selected_amount_pay": (
+            "╔══════════════════════╗\n"
+            "   💳 <b>SELECT PAYMENT METHOD</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💰 <b>Selected Amount:</b> <code>${amount:.2f} USDT</code>\n"
+            "⚡ <b>Verification:</b> Fast Manual/Admin Review\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>Please select your preferred payment network:</i>"
+        ),
+        "pay_trc20": "💵 USDT (TRC20)  •  Min $3",
+        "pay_bep20": "💵 USDT (BEP20)  •  Min $3",
         "send_txid_btn": "📤 Send Order Id / TxID",
-        "txid_prompt": "📤 Please send your payment Transaction ID (TxID) or Proof:\n\nOrder ID: {order_id}",
-        "proof_sent": "📤 Your payment proof / Order ID has been sent to the admin successfully. Please wait for verification.",
+        "txid_prompt": (
+            "╔══════════════════════╗\n"
+            "   📤 <b>PAYMENT VERIFICATION</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📦 <b>Order ID:</b> <code>{order_id}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✍️ <i>Please send your payment <b>Transaction ID (TxID)</b> or <b>Payment Screenshot</b> now:</i>"
+        ),
+        "proof_sent": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>PROOF SUBMITTED</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📤 <i>Your payment proof / Order ID has been sent to the admin successfully.</i>\n"
+            "⏳ <b>Status:</b> Pending Verification\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💎 <i>Your balance will be credited once verified.</i>"
+        ),
         "txid_used": "❌ This Order ID / TxID has already been used! Each ID can only be used once for a deposit.",
         "country_detail": (
             "╔══════════════════════╗\n"
@@ -563,18 +596,19 @@ LANG = {
         "dep_accepted_user": "✅ Your deposit has been accepted successfully!\n\n💰 ${amount:.2f} has been credited to your account.",
         "dep_rejected_user": "❌ Sorry, your deposit request has been rejected by admin.\nOrder ID: {order_id}",
         "order_box": (
-            "[ ORDER CREATED ]  {currency}\n"
-            "──────────────────────\n"
-            "  Send     ·  <code>{send_num}</code> USDT\n"
-            "  Credit   ·  {credit}\n"
-            "  Order    ·  <code>{order_id}</code>\n"
-            "  Network  ·  {network}\n"
-            "  Address  ·  <code>{address}</code>\n"
-            "  Expires  ·  {expires}\n"
-            "──────────────────────\n"
-            "Send exactly {send_val}, including all decimals. This amount was converted from ${amount:.2f} at the Binance price when the order was created and ends in a unique identifier; ${amount:.2f} is credited when it arrives.\n"
-            "Send native assets/tokens on the {network} network only.\n"
-            "Your balance will be credited by admin once verified."
+            "╔══════════════════════╗\n"
+            "   🧾 <b>ORDER CREATED</b> • {currency}\n"
+            "╚══════════════════════╝\n\n"
+            "📤 <b>Send:</b> <code>{send_num}</code> USDT\n"
+            "💰 <b>Credit:</b> <code>{credit}</code>\n"
+            "📦 <b>Order:</b> <code>{order_id}</code>\n"
+            "🌐 <b>Network:</b> <b>{network}</b>\n"
+            "📍 <b>Address:</b> <code>{address}</code>\n"
+            "🕒 <b>Created:</b> <code>{expires}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <i>Send exactly <b>{send_val}</b>, including all decimals. This amount was converted from <b>${amount:.2f}</b> at the Binance price when the order was created and ends in a unique identifier; <b>${amount:.2f}</b> is credited when it arrives.</i>\n\n"
+            "🔗 <i>Send native assets/tokens on the <b>{network}</b> network only.</i>\n"
+            "💎 <i>Your balance will be credited by admin once verified.</i>"
         )
     },
     "zh": {
@@ -617,12 +651,15 @@ LANG = {
             "✨ <i>在下方管理您的账户余额与订单：</i>"
         ),
         "deposit": (
-            "💰 请在下方选择您的充值金额。\n\n"
-            "✅ 请务必支付订单上显示的准确金额。\n\n"
-            "💳 可用支付方式：\n\n"
-            "• 🔗 USDT (TRC20)\n"
-            "• 🔗 USDT (BEP20)\n\n"
-            "选择充值金额后，请选择您的首选支付方式继续。"
+            "╔══════════════════════╗\n"
+            "   💰 <b>账户余额充值</b>\n"
+            "╚══════════════════════╝\n\n"
+            "✅ <i>请务必按照账单显示的准确金额进行支付。</i>\n\n"
+            "💳 <b>可用支付方式：</b>\n"
+            "• 🔗 <b>USDT (TRC20)</b> — 最低 <code>$3.00</code>\n"
+            "• 🔗 <b>USDT (BEP20)</b> — 最低 <code>$3.00</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>请在下方选择充值金额，然后选择支付网络：</i>"
         ),
         "support": "👉 {support_user}",
         "rules": (
@@ -657,7 +694,7 @@ LANG = {
         "select_country": "🌍 选择国家及电话区号：",
         "back": "< 返回",
         "main_menu": "< 主菜单",
-        "other_amt": "其他金额",
+        "other_amt": "✏️ 其他金额",
         "other_qty": "✏️ 其他数量",
         "cancel": "< 取消",
         "stock": "库存",
@@ -674,16 +711,46 @@ LANG = {
         ),
         "insufficient_balance": "❌ 余额不足！\n需要：${required:.2f}\n当前余额：${balance:.2f}\n请先进行充值。",
         "balance_text": "剩余余额：",
-        "deposit_select_amt": "请输入自定义充值金额 (USDT，最低 $3)：",
+        "deposit_select_amt": (
+            "╔══════════════════════╗\n"
+            "   ✏️ <b>自定义充值金额</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💵 <b>最低充值：</b> <code>$3.00 USDT</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>请输入您要充值的金额（例如：3、15、25）：</i>"
+        ),
         "min_network": "❌ 该网络最低充值金额为 $3.00！",
         "min_deposit_err": "❌ 最低充值金额为 ${min_limit:.2f}，请重新输入：",
         "invalid_amount": "❌ 金额无效，请输入有效的数字（例如：3 或 10）：",
-        "selected_amount_pay": "💰 已选金额：${amount:.2f}\n\n请选择您的首选付款方式：",
-        "pay_trc20": "💵 USDT (TRC20) (最低 $3)",
-        "pay_bep20": "💵 USDT (BEP20) (最低 $3)",
+        "selected_amount_pay": (
+            "╔══════════════════════╗\n"
+            "   💳 <b>选择支付方式</b>\n"
+            "╚══════════════════════╝\n\n"
+            "💰 <b>已选金额：</b> <code>${amount:.2f} USDT</code>\n"
+            "⚡ <b>到账说明：</b> 管理员审核后即时入账\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👇 <i>请选择您的首选付款网络：</i>"
+        ),
+        "pay_trc20": "💵 USDT (TRC20)  •  最低 $3",
+        "pay_bep20": "💵 USDT (BEP20)  •  最低 $3",
         "send_txid_btn": "📤 发送订单号 / 交易单号 (TxID)",
-        "txid_prompt": "📤 请发送您的付款交易单号 (TxID) 或付款截图凭证：\n\n订单号：{order_id}",
-        "proof_sent": "📤 您的付款凭证 / 订单号已成功发送给管理员，请等待验证。",
+        "txid_prompt": (
+            "╔══════════════════════╗\n"
+            "   📤 <b>提交付款凭证</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📦 <b>订单编号：</b> <code>{order_id}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✍️ <i>请发送您的付款<b>交易单号 (TxID)</b> 或<b>付款截图</b>：</i>"
+        ),
+        "proof_sent": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>凭证已提交</b>\n"
+            "╚══════════════════════╝\n\n"
+            "📤 <i>您的付款凭证 / 订单号已成功发送给管理员。</i>\n"
+            "⏳ <b>状态：</b> 等待审核验证\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💎 <i>验证通过后余额将立即为您入账。</i>"
+        ),
         "txid_used": "❌ 此订单号 / TxID 已被使用！每个单号只能用于充值一次。",
         "country_detail": (
             "╔══════════════════════╗\n"
@@ -718,18 +785,19 @@ LANG = {
         "dep_accepted_user": "✅ 您的充值申请已审核通过！\n\n💰 ${amount:.2f} 已成功入账到您的账户。",
         "dep_rejected_user": "❌ 抱歉，您的充值申请已被管理员拒绝。\n订单号：{order_id}",
         "order_box": (
-            "[ 订单已创建 ]  {currency}\n"
-            "──────────────────────\n"
-            "  转账金额  ·  <code>{send_num}</code> USDT\n"
-            "  到账金额  ·  {credit}\n"
-            "  订单编号  ·  <code>{order_id}</code>\n"
-            "  转账网络  ·  {network}\n"
-            "  收款地址  ·  <code>{address}</code>\n"
-            "  创建时间  ·  {expires}\n"
-            "──────────────────────\n"
-            "请准确转账 {send_val}（包含所有小数位）。该金额按创建订单时的币安汇率由 ${amount:.2f} 换算并带有唯一识别尾数；到账后将自动为您充值 ${amount:.2f}。\n"
-            "请仅通过 {network} 网络转账原生资产/代币。\n"
-            "管理员验证通过后将立即为您增加账户余额。"
+            "╔══════════════════════╗\n"
+            "   🧾 <b>订单已创建</b> • {currency}\n"
+            "╚══════════════════════╝\n\n"
+            "📤 <b>转账金额：</b> <code>{send_num}</code> USDT\n"
+            "💰 <b>到账金额：</b> <code>{credit}</code>\n"
+            "📦 <b>订单编号：</b> <code>{order_id}</code>\n"
+            "🌐 <b>转账网络：</b> <b>{network}</b>\n"
+            "📍 <b>收款地址：</b> <code>{address}</code>\n"
+            "🕒 <b>创建时间：</b> <code>{expires}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <i>请准确转账 <b>{send_val}</b>（包含所有小数位）。该金额按创建订单时的币安汇率由 <b>${amount:.2f}</b> 换算并带有唯一识别尾数；到账后将自动为您充值 <b>${amount:.2f}</b>。</i>\n\n"
+            "🔗 <i>请仅通过 <b>{network}</b> 网络转账原生资产/代币。</i>\n"
+            "💎 <i>管理员验证通过后将立即为您增加账户余额。</i>"
         )
     }
 }
@@ -801,6 +869,32 @@ def get_main_menu_inline_back(user_id):
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
 
+def send_colored_main_menu_back(chat_id, text, user_id):
+    """
+    Sends a premium HTML message with a colored '< Main Menu' button.
+    """
+    t = LANG[get_lang(user_id)]
+    inline_keyboard = [
+        [{"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}]
+    ]
+    try:
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored back menu warning: {e}")
+
+    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=get_main_menu_inline_back(user_id))
+
 def get_select_amount_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=3)
@@ -816,6 +910,71 @@ def get_select_amount_keyboard(user_id):
     )
     return markup
 
+def send_colored_select_amount_menu(chat_id, user_id, message_id=None):
+    """
+    Sends or edits the Recharge Amount Selection screen with a premium HTML box
+    and multi-color inline buttons.
+    """
+    t = LANG[get_lang(user_id)]
+    text = t["deposit"]
+
+    inline_keyboard = [
+        [
+            {"text": "3 USDT", "callback_data": "amt_3", "style": "success"},
+            {"text": "5 USDT", "callback_data": "amt_5", "style": "primary"},
+            {"text": "10 USDT", "callback_data": "amt_10", "style": "success"}
+        ],
+        [
+            {"text": "20 USDT", "callback_data": "amt_20", "style": "primary"},
+            {"text": "50 USDT", "callback_data": "amt_50", "style": "success"},
+            {"text": "100 USDT", "callback_data": "amt_100", "style": "primary"}
+        ],
+        [
+            {"text": t["other_amt"], "callback_data": "amt_other", "style": "danger"},
+            {"text": t["cancel"], "callback_data": "dep_cancel", "style": "primary"}
+        ]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup_json
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored select amount warning: {e}")
+
+    fallback = get_select_amount_keyboard(user_id)
+    if message_id:
+        try:
+            bot.edit_message_text(text, chat_id, message_id, parse_mode="HTML", reply_markup=fallback)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=fallback)
+
 def get_payment_methods_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -826,6 +985,60 @@ def get_payment_methods_keyboard(user_id):
     )
     return markup
 
+def send_colored_payment_methods(chat_id, user_id, amount, message_id=None):
+    """
+    Sends or edits the Payment Method Selection screen with a premium HTML box
+    and multi-color inline buttons.
+    """
+    t = LANG[get_lang(user_id)]
+    text = t["selected_amount_pay"].format(amount=amount)
+
+    inline_keyboard = [
+        [{"text": t["pay_trc20"], "callback_data": "order_usdt_trc20", "style": "success"}],
+        [{"text": t["pay_bep20"], "callback_data": "order_usdt_bep20", "style": "primary"}],
+        [{"text": t["cancel"], "callback_data": "dep_cancel", "style": "danger"}]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup_json
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored payment methods warning: {e}")
+
+    fallback = get_payment_methods_keyboard(user_id)
+    if message_id:
+        try:
+            bot.edit_message_text(text, chat_id, message_id, parse_mode="HTML", reply_markup=fallback)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=fallback)
+
 def get_order_created_keyboard(net_code, order_id, user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -833,6 +1046,58 @@ def get_order_created_keyboard(net_code, order_id, user_id):
     markup.add(types.InlineKeyboardButton(t["back"], callback_data="dep_confirm"))
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
+
+def send_colored_order_created(chat_id, user_id, order_text, order_id, message_id=None):
+    """
+    Sends or edits the Order Created invoice with a premium HTML box
+    and multi-color inline buttons.
+    """
+    t = LANG[get_lang(user_id)]
+    inline_keyboard = [
+        [{"text": t["send_txid_btn"], "callback_data": f"send_order_id_{order_id}", "style": "success"}],
+        [{"text": t["back"], "callback_data": "dep_confirm", "style": "danger"}],
+        [{"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}]
+    ]
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": order_text,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup_json
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        res = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": order_text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored order created warning: {e}")
+
+    fallback = get_order_created_keyboard("tron", order_id, user_id)
+    if message_id:
+        try:
+            bot.edit_message_text(order_text, chat_id, message_id, parse_mode="HTML", reply_markup=fallback)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, order_text, parse_mode="HTML", reply_markup=fallback)
 
 def get_quantity_keyboard(item_key, user_id):
     t = LANG[get_lang(user_id)]
@@ -1319,7 +1584,7 @@ def cancel_operation(message):
     user_id = message.from_user.id
     user_states.pop(user_id, None)
     t = LANG[get_lang(user_id)]
-    bot.send_message(message.chat.id, t["cancel_op"], reply_markup=get_main_menu_inline_back(user_id))
+    send_colored_main_menu_back(message.chat.id, t["cancel_op"], user_id)
 
 @bot.message_handler(content_types=['document'])
 def handle_document_uploads(message):
@@ -1378,7 +1643,7 @@ def handle_all_messages(message):
             return
         elif is_deposit:
             user_states[user_id] = "waiting_for_deposit"
-            bot.send_message(message.chat.id, t["deposit"], reply_markup=get_select_amount_keyboard(user_id))
+            send_colored_select_amount_menu(message.chat.id, user_id)
             return
         elif is_account:
             send_colored_account_menu(message.chat.id, message.from_user, user_id)
@@ -1552,7 +1817,11 @@ def handle_all_messages(message):
                 success_count += 1
             except Exception:
                 fail_count += 1
-        bot.send_message(message.chat.id, f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users", reply_markup=get_main_menu_inline_back(user_id))
+        send_colored_main_menu_back(
+            message.chat.id,
+            f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users",
+            user_id
+        )
         return
 
     if state == "waiting_for_zip_2fa" and is_admin(user_id):
@@ -1642,7 +1911,7 @@ def handle_all_messages(message):
         except Exception as e:
             print(f"Failed to send proof to admin: {e}")
 
-        bot.send_message(message.chat.id, t["proof_sent"], reply_markup=get_main_menu_inline_back(user_id))
+        send_colored_main_menu_back(message.chat.id, t["proof_sent"], user_id)
         return
 
     if state.startswith("waiting_for_custom_qty_"):
@@ -1667,8 +1936,7 @@ def handle_all_messages(message):
                 return
             user_amounts[user_id] = custom_amount
             user_states[user_id] = "waiting_for_payment_method"
-            payment_text = t["selected_amount_pay"].format(amount=custom_amount)
-            bot.send_message(message.chat.id, payment_text, reply_markup=get_payment_methods_keyboard(user_id))
+            send_colored_payment_methods(message.chat.id, user_id, custom_amount)
         except ValueError:
             bot.send_message(message.chat.id, t["invalid_amount"])
         return
@@ -1694,10 +1962,10 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
     total_price = round(price_per_unit * qty, 2)
     user_balance = user_balances.get(user_id, 0.00)
     if user_balance < total_price:
-        bot.send_message(
+        send_colored_main_menu_back(
             chat_id,
             t["insufficient_balance"].format(required=total_price, balance=user_balance),
-            reply_markup=get_main_menu_inline_back(user_id)
+            user_id
         )
         return
 
@@ -1798,10 +2066,7 @@ def handle_inline_clicks(call):
     if call.data == "menu_deposit":
         user_states[user_id] = "waiting_for_deposit"
         bot.answer_callback_query(call.id)
-        try:
-            bot.edit_message_text(t["deposit"], call.message.chat.id, call.message.message_id, reply_markup=get_select_amount_keyboard(user_id))
-        except Exception:
-            bot.send_message(call.message.chat.id, t["deposit"], reply_markup=get_select_amount_keyboard(user_id))
+        send_colored_select_amount_menu(call.message.chat.id, user_id, call.message.message_id)
         return
 
     if call.data == "menu_support":
@@ -1917,9 +2182,9 @@ def handle_inline_clicks(call):
 
         prompt_text = t["txid_prompt"].format(order_id=order_id)
         try:
-            bot.edit_message_text(prompt_text, call.message.chat.id, call.message.message_id)
+            bot.edit_message_text(prompt_text, call.message.chat.id, call.message.message_id, parse_mode="HTML")
         except Exception:
-            bot.send_message(call.message.chat.id, prompt_text)
+            bot.send_message(call.message.chat.id, prompt_text, parse_mode="HTML")
         return
 
     if call.data == "admin_management":
@@ -2306,26 +2571,22 @@ def handle_inline_clicks(call):
         return
 
     if call.data in ["btn_deposit_open", "dep_confirm", "▲ Deposit"]:
-        try:
-            bot.answer_callback_query(call.id)
-            bot.edit_message_text(t["deposit"], call.message.chat.id, call.message.message_id, reply_markup=get_select_amount_keyboard(user_id))
-        except Exception:
-            bot.send_message(call.message.chat.id, t["deposit"], reply_markup=get_select_amount_keyboard(user_id))
+        bot.answer_callback_query(call.id)
+        send_colored_select_amount_menu(call.message.chat.id, user_id, call.message.message_id)
         return
 
     elif call.data.startswith("amt_"):
         if call.data == "amt_other":
             user_states[user_id] = "waiting_for_custom_amount"
             bot.answer_callback_query(call.id)
-            bot.send_message(call.message.chat.id, t["deposit_select_amt"])
+            send_colored_main_menu_back(call.message.chat.id, t["deposit_select_amt"], user_id)
         else:
             try:
                 selected_val = float(call.data.split("_")[1])
                 user_amounts[user_id] = selected_val
                 user_states[user_id] = "waiting_for_payment_method"
-                payment_text = t["selected_amount_pay"].format(amount=selected_val)
                 bot.answer_callback_query(call.id)
-                bot.edit_message_text(payment_text, call.message.chat.id, call.message.message_id, reply_markup=get_payment_methods_keyboard(user_id))
+                send_colored_payment_methods(call.message.chat.id, user_id, selected_val, call.message.message_id)
             except Exception:
                 pass
         return
@@ -2372,10 +2633,7 @@ def handle_inline_clicks(call):
             amount=current_amount
         )
         bot.answer_callback_query(call.id)
-        try:
-            bot.edit_message_text(order_text, call.message.chat.id, call.message.message_id, parse_mode="HTML", reply_markup=get_order_created_keyboard(net_code, order_id, user_id))
-        except Exception:
-            bot.send_message(call.message.chat.id, order_text, parse_mode="HTML", reply_markup=get_order_created_keyboard(net_code, order_id, user_id))
+        send_colored_order_created(call.message.chat.id, user_id, order_text, order_id, call.message.message_id)
         return
 
     elif call.data == "back_to_products_menu":
