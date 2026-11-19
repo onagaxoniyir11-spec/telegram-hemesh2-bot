@@ -8,6 +8,7 @@ import io
 import time
 import base64
 import json
+import threading
 import requests
 from flask import Flask, request
 
@@ -29,6 +30,10 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 support_admin_username = "@proxyvpnservice17"
 ADMIN_IDS = [8138758919]
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "H101010")
+
+# History Retention Limit: 2 hours (7200 seconds)
+HISTORY_TTL_SECONDS = 2 * 60 * 60
+CLEANUP_INTERVAL_SECONDS = 5 * 60
 
 # In-memory Database & State Management
 user_amounts = {}
@@ -310,6 +315,64 @@ def fb_delete(path):
         print(f"Firebase DELETE Error ({path}): {e}")
     return False
 
+def _prune_records_older_than(records, cutoff_ts):
+    if not isinstance(records, list):
+        return [], False
+    kept = []
+    changed = False
+    for item in records:
+        if isinstance(item, dict):
+            ts = item.get("timestamp")
+            if ts is not None:
+                try:
+                    if float(ts) < cutoff_ts:
+                        changed = True
+                        continue
+                except Exception:
+                    pass
+        kept.append(item)
+    return kept, changed
+
+def cleanup_old_histories(max_age_seconds=HISTORY_TTL_SECONDS):
+    """
+    Removes purchase and deposit history entries older than 2 hours (7200s)
+    from memory and syncs updated user records to Firebase Realtime Database.
+    """
+    cutoff_ts = time.time() - max_age_seconds
+    impacted_users = set()
+
+    for uid in list(user_purchases.keys()):
+        pruned, changed = _prune_records_older_than(user_purchases.get(uid, []), cutoff_ts)
+        if changed:
+            user_purchases[uid] = pruned
+            impacted_users.add(int(uid))
+
+    for uid in list(user_deposits.keys()):
+        pruned, changed = _prune_records_older_than(user_deposits.get(uid, []), cutoff_ts)
+        if changed:
+            user_deposits[uid] = pruned
+            impacted_users.add(int(uid))
+
+    for uid in impacted_users:
+        fb_put(f"user_purchases/{uid}", user_purchases.get(uid, []))
+        fb_put(f"user_deposits/{uid}", user_deposits.get(uid, []))
+
+    if impacted_users:
+        print(f"[History Cleanup] Pruned >2h history for {len(impacted_users)} user(s).")
+    return len(impacted_users)
+
+def start_history_cleanup_scheduler():
+    def _worker():
+        while True:
+            time.sleep(CLEANUP_INTERVAL_SECONDS)
+            try:
+                cleanup_old_histories()
+            except Exception as e:
+                print(f"[History Cleanup Error]: {e}")
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
 def load_data_from_firebase():
     global user_balances, user_purchases, user_deposits, user_languages, all_users
     global product_inventory, support_admin_username, pending_deposits, used_txids
@@ -362,6 +425,8 @@ def load_data_from_firebase():
     if sup:
         support_admin_username = sup
 
+    cleanup_old_histories()
+
 def ensure_user_registered(user_id):
     is_new = False
     if user_id not in all_users:
@@ -400,6 +465,7 @@ def save_used_txids():
 
 print("Initializing & Loading data from Firebase...")
 load_data_from_firebase()
+start_history_cleanup_scheduler()
 
 def setup_bot_startup():
     try:
@@ -1336,6 +1402,7 @@ def get_account_keyboard(user_id):
     return markup
 
 def send_colored_account_menu(chat_id, user_obj, user_id, message_id=None):
+    cleanup_old_histories()
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
     no_user_str = "无" if lang_code == "zh" else "N/A"
@@ -1656,6 +1723,7 @@ def get_user_detail_keyboard(target_uid):
     return markup
 
 def get_user_detail_text(target_uid):
+    cleanup_old_histories()
     bal = user_balances.get(int(target_uid), 0.0)
     pur = user_purchases.get(int(target_uid), [])
     dep = user_deposits.get(int(target_uid), [])
@@ -1679,6 +1747,7 @@ def send_welcome(message):
     user_id = message.chat.id if hasattr(message, 'chat') else message.from_user.id
     user_states.pop(user_id, None)
     ensure_user_registered(user_id)
+    cleanup_old_histories()
     lang_code = get_lang(user_id)
     welcome_text = LANG[lang_code]["welcome"].format(support_user=support_admin_username)
     send_colored_main_menu(message.chat.id, welcome_text, user_id)
@@ -2437,6 +2506,7 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         target_uid = int(call.data.replace("mgmt_hist_pur_", ""))
+        cleanup_old_histories()
         pur = user_purchases.get(target_uid, [])
         txt = "\n".join([p.get("text", "") if isinstance(p, dict) else str(p) for p in pur[-20:]]) or "No purchases yet."
         bot.answer_callback_query(call.id, "Purchase History")
@@ -2452,6 +2522,7 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         target_uid = int(call.data.replace("mgmt_hist_dep_", ""))
+        cleanup_old_histories()
         dep = user_deposits.get(target_uid, [])
         txt = "\n".join([d.get("text", "") if isinstance(d, dict) else str(d) for d in dep[-20:]]) or "No deposits yet."
         bot.answer_callback_query(call.id, "Deposit History")
