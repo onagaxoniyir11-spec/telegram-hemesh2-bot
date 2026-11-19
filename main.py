@@ -600,8 +600,30 @@ LANG = {
         "invalid_qty_zero": "❌ Please enter a valid quantity greater than 0:",
         "invalid_qty_num": "❌ Invalid number! Please enter a valid integer (e.g., 2, 5):",
         "product_not_found": "❌ Product not found.",
-        "deliver_zip_caption": "✅ Purchase Successful!\n\n{flag} Country: {name}\n📦 File: {file}\n🔐 2FA & ZIP Password: {tfa}\n💵 Paid: ${price:.2f}\n\nRemaining Balance: ${balance:.2f}",
-        "deliver_acc_text": "✅ Purchase Successful!\n\n{flag} Country: {name}\n📱 Telegram Number: {num}\n🔐 2FA Code: {tfa}\n💵 Paid: ${price:.2f}\n\nRemaining Balance: ${balance:.2f}",
+        "deliver_zip_caption": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>PURCHASE SUCCESSFUL</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🌍 <b>Country:</b> {flag} <b>{name}</b>\n"
+            "📦 <b>File:</b> <code>{file}</code>\n"
+            "🔐 <b>2FA &amp; ZIP Password:</b> <code>{tfa}</code>\n"
+            "💵 <b>Paid:</b> <code>${price:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💳 <b>Remaining Balance:</b> <code>${balance:.2f}</code>\n"
+            "⚡ <i>Please download &amp; verify your file immediately.</i>"
+        ),
+        "deliver_acc_text": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>PURCHASE SUCCESSFUL</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🌍 <b>Country:</b> {flag} <b>{name}</b>\n"
+            "📱 <b>Telegram Number:</b> <code>{num}</code>\n"
+            "🔐 <b>2FA Code:</b> <code>{tfa}</code>\n"
+            "💵 <b>Paid:</b> <code>${price:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💳 <b>Remaining Balance:</b> <code>${balance:.2f}</code>\n"
+            "⚡ <i>Please log in &amp; verify your account immediately.</i>"
+        ),
         "deliver_err": "❌ Error delivering item: {err}",
         "cancel_op": "❌ Current operation cancelled.",
         "dep_accepted_user": (
@@ -811,8 +833,30 @@ LANG = {
         "invalid_qty_zero": "❌ 请输入大于 0 的有效数量：",
         "invalid_qty_num": "❌ 数字无效！请输入有效的整数（例如：2、5）：",
         "product_not_found": "❌ 未找到该产品。",
-        "deliver_zip_caption": "✅ 购买成功！\n\n{flag} 国家：{name}\n📦 文件：{file}\n🔐 二次验证及压缩包密码：{tfa}\n💵 实付金额：${price:.2f}\n\n剩余余额：${balance:.2f}",
-        "deliver_acc_text": "✅ 购买成功！\n\n{flag} 国家：{name}\n📱 电报号码：{num}\n🔐 二次验证码：{tfa}\n💵 实付金额：${price:.2f}\n\n剩余余额：${balance:.2f}",
+        "deliver_zip_caption": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>购买成功</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🌍 <b>国家：</b> {flag} <b>{name}</b>\n"
+            "📦 <b>文件：</b> <code>{file}</code>\n"
+            "🔐 <b>二次验证及压缩包密码：</b> <code>{tfa}</code>\n"
+            "💵 <b>实付金额：</b> <code>${price:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💳 <b>剩余余额：</b> <code>${balance:.2f}</code>\n"
+            "⚡ <i>请立即下载文件并及时验证。</i>"
+        ),
+        "deliver_acc_text": (
+            "╔══════════════════════╗\n"
+            "   ✅ <b>购买成功</b>\n"
+            "╚══════════════════════╝\n\n"
+            "🌍 <b>国家：</b> {flag} <b>{name}</b>\n"
+            "📱 <b>电报号码：</b> <code>{num}</code>\n"
+            "🔐 <b>二次验证码：</b> <code>{tfa}</code>\n"
+            "💵 <b>实付金额：</b> <code>${price:.2f}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💳 <b>剩余余额：</b> <code>${balance:.2f}</code>\n"
+            "⚡ <i>请立即登录并检查您的账户。</i>"
+        ),
         "deliver_err": "❌ 发货时出错：{err}",
         "cancel_op": "❌ 当前操作已取消。",
         "dep_accepted_user": (
@@ -2086,7 +2130,8 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
                     chat_id,
                     document=single_zip_buffer,
                     visible_file_name=f"{display_country_name}_{file_short_name}.zip",
-                    caption=caption_txt
+                    caption=caption_txt,
+                    parse_mode="HTML"
                 )
             elif len(accounts_list) > 0:
                 purchased_item = accounts_list.pop(0)
@@ -2106,7 +2151,7 @@ def process_product_purchase(chat_id, user_id, item_key, qty):
                     price=price_per_unit,
                     balance=user_balances[user_id]
                 )
-                bot.send_message(chat_id, success_text)
+                bot.send_message(chat_id, success_text, parse_mode="HTML")
         except Exception as e:
             print(f"Error in delivering product: {e}")
             bot.send_message(chat_id, t["deliver_err"].format(err=str(e)))
