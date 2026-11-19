@@ -445,7 +445,11 @@ LANG = {
             "🚀 Thank you for choosing Soe Min’s Shop!\n"
             "💙 We wish you successful business!"
         ),
-        "products": "📁 Select a country:",
+        "products": (
+            "✨ <b>AVAILABLE COUNTRIES & STOCK</b> ✨\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🌍 Select a country below to view details & purchase:"
+        ),
         "account": "◆ PERSONAL CENTER / ACCOUNT\n────────────────────────\nUser ID: {user_id}\nUsername: {username}\nBalance: ${balance:.2f}\nPurchased: {purchased_total}",
         "deposit": (
             "💰 Please select your recharge amount below.\n\n"
@@ -502,7 +506,16 @@ LANG = {
         "txid_prompt": "📤 Please send your payment Transaction ID (TxID) or Proof:\n\nOrder ID: {order_id}",
         "proof_sent": "📤 Your payment proof / Order ID has been sent to the admin successfully. Please wait for verification.",
         "txid_used": "❌ This Order ID / TxID has already been used! Each ID can only be used once for a deposit.",
-        "country_detail": "{flag} Country: {name} ({code})\n\n💰 Price: ${price:.2f}\n📦 Available Stock: {stock} items\n\nClick below to proceed to quantity selection:",
+        "country_detail": (
+            "╔══════════════════════╗\n"
+            "   {flag} <b>{name}</b> ({code})\n"
+            "╚══════════════════════╝\n\n"
+            "💎 <b>Format:</b> Session+Json / TData\n"
+            "💰 <b>Unit Price:</b> <code>${price:.2f}</code>\n"
+            "📦 <b>Available Stock:</b> <code>{stock}</code> pcs\n"
+            "⚡ <b>Delivery:</b> Instant Automatic\n\n"
+            "👇 Click below to select quantity:"
+        ),
         "select_qty_btn": "🛒 Select Quantity",
         "qty_header": "🔢 Select Quantity for {flag} {name}:\n\nChoose how many items you want to buy:",
         "enter_custom_qty": "🔢 Please enter the quantity you want to buy (e.g., 4, 15):",
@@ -553,7 +566,11 @@ LANG = {
             "🚀 感谢选择 Soe Min’s Shop！\n"
             "💙 祝您生意兴隆！"
         ),
-        "products": "📁 选择国家：",
+        "products": (
+            "✨ <b>可用国家与实时库存</b> ✨\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🌍 请点击下方国家查看详情并购买："
+        ),
         "account": "◆ 个人中心 / 账户信息\n────────────────────────\n用户 ID: {user_id}\n用户名: {username}\n余额: ${balance:.2f}\n已购总额: {purchased_total}",
         "deposit": (
             "💰 请在下方选择您的充值金额。\n\n"
@@ -610,7 +627,16 @@ LANG = {
         "txid_prompt": "📤 请发送您的付款交易单号 (TxID) 或付款截图凭证：\n\n订单号：{order_id}",
         "proof_sent": "📤 您的付款凭证 / 订单号已成功发送给管理员，请等待验证。",
         "txid_used": "❌ 此订单号 / TxID 已被使用！每个单号只能用于充值一次。",
-        "country_detail": "{flag} 国家：{name} ({code})\n\n💰 单价：${price:.2f}\n📦 可用库存：{stock} 件\n\n请点击下方按钮选择购买数量：",
+        "country_detail": (
+            "╔══════════════════════╗\n"
+            "   {flag} <b>{name}</b> ({code})\n"
+            "╚══════════════════════╝\n\n"
+            "💎 <b>格式：</b> Session+Json / TData\n"
+            "💰 <b>单价：</b> <code>${price:.2f}</code>\n"
+            "📦 <b>可用库存：</b> <code>{stock}</code> 件\n"
+            "⚡ <b>发货方式：</b> 自动秒发\n\n"
+            "👇 请点击下方按钮选择购买数量："
+        ),
         "select_qty_btn": "🛒 选择数量",
         "qty_header": "🔢 选择 {flag} {name} 的购买数量：\n\n请选择您要购买的数量：",
         "enter_custom_qty": "🔢 请输入您要购买的数量（例如：4、15）：",
@@ -768,15 +794,82 @@ def get_products_countries_keyboard(user_id):
     if "Countries" in product_inventory and "items" in product_inventory["Countries"]:
         for country, data in product_inventory["Countries"]["items"].items():
             c_code = data.get("code", "")
+            price = data.get("price", 1.00)
             raw_name = data.get("names", {}).get(lang_code, country)
             clean_name = format_country_display_name(country, raw_name, lang_code)
             flag = get_country_flag(country, c_code)
             zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in data.get("zip_files", []))
             total_stock = len(data.get("accounts", [])) + zip_stock_count
-            btn_text = f"{flag} {clean_name} ({c_code}) [{total_stock}]"
+            btn_text = f"{flag} {clean_name} ({c_code})  •  ${price:.2f}  |  📦 {total_stock}"
             markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"select_country_{country}"))
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
     return markup
+
+def send_colored_countries_menu(chat_id, user_id, message_id=None):
+    """
+    Sends or edits the Country List with rotating vibrant colors (Blue, Green, Red/Coral)
+    and a premium storefront layout.
+    """
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    header_text = t["products"]
+    styles_cycle = ["primary", "success", "danger"]
+
+    inline_keyboard = []
+    if "Countries" in product_inventory and "items" in product_inventory["Countries"]:
+        for idx, (country, data) in enumerate(product_inventory["Countries"]["items"].items()):
+            c_code = data.get("code", "")
+            price = data.get("price", 1.00)
+            raw_name = data.get("names", {}).get(lang_code, country)
+            clean_name = format_country_display_name(country, raw_name, lang_code)
+            flag = get_country_flag(country, c_code)
+            zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in data.get("zip_files", []))
+            total_stock = len(data.get("accounts", [])) + zip_stock_count
+
+            btn_text = f"{flag} {clean_name} ({c_code})  •  ${price:.2f}  |  📦 {total_stock}"
+            btn_style = styles_cycle[idx % len(styles_cycle)]
+            inline_keyboard.append([
+                {"text": btn_text, "callback_data": f"select_country_{country}", "style": btn_style}
+            ])
+
+    inline_keyboard.append([
+        {"text": t["main_menu"], "callback_data": "go_main_menu", "style": "primary"}
+    ])
+
+    reply_markup_json = json.dumps({"inline_keyboard": inline_keyboard})
+    try:
+        if message_id:
+            payload = {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": header_text,
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup_json
+            }
+            res = requests.post(f"https://api.telegram.org/bot{TOKEN}/editMessageText", data=payload, timeout=15)
+            if res.status_code == 200:
+                return
+        payload = {
+            "chat_id": chat_id,
+            "text": header_text,
+            "parse_mode": "HTML",
+            "reply_markup": reply_markup_json
+        }
+        res = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=15)
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored countries menu warning: {e}")
+
+    # Fallback to standard inline keyboard if style parameter is unsupported
+    fallback_markup = get_products_countries_keyboard(user_id)
+    if message_id:
+        try:
+            bot.edit_message_text(header_text, chat_id, message_id, parse_mode="HTML", reply_markup=fallback_markup)
+            return
+        except Exception:
+            pass
+    bot.send_message(chat_id, header_text, parse_mode="HTML", reply_markup=fallback_markup)
 
 def get_language_keyboard(user_id):
     t = LANG[get_lang(user_id)]
@@ -882,8 +975,7 @@ def stock_command(message):
     user_id = message.from_user.id
     user_states.pop(user_id, None)
     ensure_user_registered(user_id)
-    t = LANG[get_lang(user_id)]
-    bot.send_message(message.chat.id, t["products"], reply_markup=get_products_countries_keyboard(user_id))
+    send_colored_countries_menu(message.chat.id, user_id)
 
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
@@ -955,7 +1047,7 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, "🔐 Please enter the Admin Panel password:")
             return
         elif is_products:
-            bot.send_message(message.chat.id, t["products"], reply_markup=get_products_countries_keyboard(user_id))
+            send_colored_countries_menu(message.chat.id, user_id)
             return
         elif is_deposit:
             user_states[user_id] = "waiting_for_deposit"
@@ -1380,10 +1472,7 @@ def handle_inline_clicks(call):
     # Colored Main Menu Callbacks
     if call.data == "menu_products":
         bot.answer_callback_query(call.id)
-        try:
-            bot.edit_message_text(t["products"], call.message.chat.id, call.message.message_id, reply_markup=get_products_countries_keyboard(user_id))
-        except Exception:
-            bot.send_message(call.message.chat.id, t["products"], reply_markup=get_products_countries_keyboard(user_id))
+        send_colored_countries_menu(call.message.chat.id, user_id, call.message.message_id)
         return
 
     if call.data == "menu_deposit":
@@ -1732,20 +1821,43 @@ def handle_inline_clicks(call):
         bot.answer_callback_query(call.id, clean_name)
         zip_stock_count = sum(len(zf.get("extracted_files", [])) for zf in c_data.get("zip_files", []))
         stock_count = len(c_data.get("accounts", [])) + zip_stock_count
+
+        country_detail_text = t["country_detail"].format(
+            flag=flag,
+            name=clean_name,
+            code=c_code,
+            price=price,
+            stock=stock_count
+        )
+        # Colored detail action buttons
+        detail_kb = [
+            [{"text": t["select_qty_btn"], "callback_data": f"buy_country_{country}", "style": "success"}],
+            [{"text": t["back"], "callback_data": "back_to_products_menu", "style": "primary"}]
+        ]
+        try:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/editMessageText",
+                data={
+                    "chat_id": call.message.chat.id,
+                    "message_id": call.message.message_id,
+                    "text": country_detail_text,
+                    "parse_mode": "HTML",
+                    "reply_markup": json.dumps({"inline_keyboard": detail_kb})
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return
+        except Exception:
+            pass
+
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton(t["select_qty_btn"], callback_data=f"buy_country_{country}"),
             types.InlineKeyboardButton(t["back"], callback_data="back_to_products_menu")
         )
         try:
-            country_detail_text = t["country_detail"].format(
-                flag=flag,
-                name=clean_name,
-                code=c_code,
-                price=price,
-                stock=stock_count
-            )
-            bot.edit_message_text(country_detail_text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+            bot.edit_message_text(country_detail_text, call.message.chat.id, call.message.message_id, parse_mode="HTML", reply_markup=markup)
         except Exception:
             pass
         return
@@ -1976,10 +2088,7 @@ def handle_inline_clicks(call):
 
     elif call.data == "back_to_products_menu":
         bot.answer_callback_query(call.id)
-        try:
-            bot.edit_message_text(t["products"], call.message.chat.id, call.message.message_id, reply_markup=get_products_countries_keyboard(user_id))
-        except Exception:
-            pass
+        send_colored_countries_menu(call.message.chat.id, user_id, call.message.message_id)
         return
 
     elif call.data in ["go_main_menu", "dep_cancel"]:
