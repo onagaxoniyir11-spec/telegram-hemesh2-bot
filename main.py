@@ -298,6 +298,13 @@ def webhook():
     return '', 403
 
 
+@app.route('/<path:subpath>', methods=['POST', 'GET'])
+def handle_stale_webhook(subpath):
+    if subpath.startswith("8908618066"):
+        return "Ignored stale webhook", 200
+    return "Not Found", 404
+
+
 # --------------------------------------------------------------------------
 
 DEFAULT_DATABASE = {
