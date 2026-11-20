@@ -1096,6 +1096,34 @@ def toggle_user_language(user_id):
     return alert_text
 
 
+def build_colored_reply_keyboard_payload(user_id):
+    t = LANG[get_lang(user_id)]
+    keyboard_rows = [
+        [
+            {"text": t["menu_products"], "style": "primary"},
+            {"text": t["menu_deposit"], "style": "success"}
+        ],
+        [
+            {"text": t["menu_support"], "style": "danger"},
+            {"text": t["menu_account"], "style": "primary"}
+        ],
+        [
+            {"text": t["menu_lang"], "style": "success"},
+            {"text": t["menu_rules"], "style": "danger"}
+        ]
+    ]
+    if is_admin(user_id):
+        keyboard_rows.append([
+            {"text": t["menu_admin"], "style": "primary"}
+        ])
+
+    return json.dumps({
+        "keyboard": keyboard_rows,
+        "resize_keyboard": True,
+        "is_persistent": True
+    })
+
+
 def get_main_reply_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -1113,6 +1141,22 @@ def get_main_reply_keyboard(user_id):
 
 
 def send_colored_main_menu(chat_id, text, user_id):
+    try:
+        res = http_session.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_markup": build_colored_reply_keyboard_payload(user_id)
+            },
+            timeout=10
+        )
+        if res.status_code == 200:
+            return
+    except Exception as e:
+        print(f"Colored reply keyboard warning: {e}")
+
     bot.send_message(
         chat_id,
         text,
