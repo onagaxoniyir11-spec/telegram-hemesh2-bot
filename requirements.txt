@@ -2,3 +2,4 @@ pyTelegramBotAPI
 pyzipper
 requests
 flask
+gunicorn
