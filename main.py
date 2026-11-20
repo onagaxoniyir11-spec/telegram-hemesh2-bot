@@ -51,8 +51,8 @@ deposit_lock = threading.Lock()
 update_queue = queue.Queue(maxsize=5000)
 
 # Support Username & Admin IDs
-support_admin_username = os.environ.get("SUPPORT_USERNAME", "@proxyvpnservice17")
-ADMIN_IDS = [8138758919]
+support_admin_username = os.environ.get("SUPPORT_USERNAME", "@longzu01")
+ADMIN_IDS = [8516400686]
 
 # History Retention Limit: 2 hours (7200 seconds)
 HISTORY_TTL_SECONDS = 2 * 60 * 60
@@ -295,7 +295,7 @@ def webhook():
 # --------------------------------------------------------------------------
 
 DEFAULT_DATABASE = {
-    "support_admin": "@proxyvpnservice17",
+    "support_admin": "@longzu01",
     "product_inventory": {
         "Countries": {
             "type": "countries",
