@@ -583,7 +583,7 @@ LANG = {
     "en": {
         "welcome": (
             "╔══════════════════════╗\n"
-            "   ✨ <b>@GmailsFarmar_bot</b>\n"
+            "   ✨ <b>@Session_Tdata_ShopBot</b>\n"
             "╚══════════════════════╝\n\n"
             "💎 <i>Your trusted marketplace for Telegram Accounts (Session+Json/TData).</i>\n\n"
             "📦 <b>AVAILABLE SERVICES</b>\n"
@@ -606,7 +606,7 @@ LANG = {
             "👨‍💻 <b>Support:</b> {support_user}\n"
             "📊 <b>Live Stock:</b> Use /stock anytime\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🚀 <i>Thank you for choosing <b>@GmailsFarmar_bot</b>!</i>\n"
+            "🚀 <i>Thank you for choosing <b>@Session_Tdata_ShopBot</b>!</i>\n"
             "💙 <i>Wishing you smooth &amp; profitable business!</i>"
         ),
         "products": (
@@ -830,7 +830,7 @@ LANG = {
     "zh": {
         "welcome": (
             "╔══════════════════════╗\n"
-            "   ✨ <b>@GmailsFarmar_bot</b>\n"
+            "   ✨ <b>@Session_Tdata_ShopBot</b>\n"
             "╚══════════════════════╝\n\n"
             "💎 <i>您值得信赖的 Telegram 账号 (Session+Json/TData) 交易中心。</i>\n\n"
             "📦 <b>核心服务</b>\n"
@@ -853,7 +853,7 @@ LANG = {
             "👨‍💻 <b>官方客服：</b> {support_user}\n"
             "📊 <b>实时库存：</b> 随时发送 /stock 查看\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🚀 <i>感谢选择 <b>@GmailsFarmar_bot</b>！</i>\n"
+            "🚀 <i>感谢选择 <b>@Session_Tdata_ShopBot</b>！</i>\n"
             "💙 <i>祝您财源广进、生意兴隆！</i>"
         ),
         "products": (
