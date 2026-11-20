@@ -1181,6 +1181,15 @@ def send_colored_main_menu(chat_id, text, user_id):
     )
 
 
+def open_main_menu(chat_id, user_id):
+    with state_lock:
+        user_states.pop(user_id, None)
+    ensure_user_registered(user_id)
+    lang_code = get_lang(user_id)
+    welcome_text = LANG[lang_code]["welcome"].format(support_user=support_admin_username)
+    send_colored_main_menu(chat_id, welcome_text, user_id)
+
+
 def get_main_menu_inline_back(user_id):
     t = LANG[get_lang(user_id)]
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -2017,12 +2026,7 @@ def _run_broadcast_worker(admin_chat_id, source_message_id, target_uids):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.from_user.id if getattr(message, 'from_user', None) else message.chat.id
-    with state_lock:
-        user_states.pop(user_id, None)
-    ensure_user_registered(user_id)
-    lang_code = get_lang(user_id)
-    welcome_text = LANG[lang_code]["welcome"].format(support_user=support_admin_username)
-    send_colored_main_menu(message.chat.id, welcome_text, user_id)
+    open_main_menu(message.chat.id, user_id)
 
 
 @bot.message_handler(commands=['stock'])
@@ -2119,9 +2123,7 @@ def handle_all_messages(message):
 
         if is_lang:
             toggle_user_language(user_id)
-            new_lang_code = get_lang(user_id)
-            welcome_text = LANG[new_lang_code]["welcome"].format(support_user=support_admin_username)
-            send_colored_main_menu(message.chat.id, welcome_text, user_id)
+            open_main_menu(message.chat.id, user_id)
             return
         elif is_admin_menu:
             if not is_admin(user_id):
@@ -2667,13 +2669,11 @@ def handle_inline_clicks(call):
             user_states.pop(user_id, None)
         alert_text = toggle_user_language(user_id)
         bot.answer_callback_query(call.id, alert_text)
-        new_lang_code = get_lang(user_id)
-        welcome_text = LANG[new_lang_code]["welcome"].format(support_user=support_admin_username)
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
             pass
-        send_colored_main_menu(call.message.chat.id, welcome_text, user_id)
+        open_main_menu(call.message.chat.id, user_id)
         return
 
     if call.data == "menu_rules":
@@ -3326,13 +3326,11 @@ def handle_inline_clicks(call):
 
     elif call.data in ["go_main_menu", "dep_cancel"]:
         bot.answer_callback_query(call.id)
-        with state_lock:
-            user_states.pop(user_id, None)
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
             pass
-        send_welcome(call.message)
+        open_main_menu(call.message.chat.id, user_id)
 
 
 if __name__ == '__main__':
