@@ -905,13 +905,13 @@ LANG = {
         ),
         "language": "🌐 语言已切换为中文！",
         "admin": "🛠️ 欢迎来到管理面板\n\n在下方选择一个选项：",
-        "menu_products": "🛒 产品中心",
-        "menu_account": "👤 个人中心",
-        "menu_deposit": "🪙 账户充值",
-        "menu_support": "📞 联系客服",
-        "menu_lang": "🌐 语言设置",
-        "menu_rules": "⚠️ 规则说明",
-        "menu_admin": "🛠️ 管理面板",
+        "menu_products": "🛒 Products",
+        "menu_account": "👤 Personal Center",
+        "menu_deposit": "🪙 Recharge",
+        "menu_support": "📞 Contact Customer Service",
+        "menu_lang": "🌐 Language",
+        "menu_rules": "⚠️ Rules",
+        "menu_admin": "🛠️ Admin Panel",
         "select_qty": "🔢 选择数量：\n\n请选择您要购买的数量：",
         "select_country": "🌍 选择国家及电话区号：",
         "back": "< 返回",
@@ -1096,63 +1096,29 @@ def toggle_user_language(user_id):
     return alert_text
 
 
-def remove_old_reply_keyboard(chat_id):
-    try:
-        msg = bot.send_message(chat_id, "⏳", reply_markup=types.ReplyKeyboardRemove())
-        bot.delete_message(chat_id, msg.message_id)
-    except Exception:
-        pass
+def get_main_reply_keyboard(user_id):
+    t = LANG[get_lang(user_id)]
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        types.KeyboardButton(t["menu_products"]),
+        types.KeyboardButton(t["menu_deposit"]),
+        types.KeyboardButton(t["menu_support"]),
+        types.KeyboardButton(t["menu_account"]),
+        types.KeyboardButton(t["menu_lang"]),
+        types.KeyboardButton(t["menu_rules"])
+    )
+    if is_admin(user_id):
+        markup.add(types.KeyboardButton(t["menu_admin"]))
+    return markup
 
 
 def send_colored_main_menu(chat_id, text, user_id):
-    lang_code = get_lang(user_id)
-    t = LANG[lang_code]
-
-    inline_keyboard = [
-        [
-            {"text": t["menu_products"], "callback_data": "menu_products", "style": "primary"},
-            {"text": t["menu_deposit"], "callback_data": "menu_deposit", "style": "success"}
-        ],
-        [
-            {"text": t["menu_support"], "callback_data": "menu_support", "style": "danger"},
-            {"text": t["menu_account"], "callback_data": "menu_account", "style": "primary"}
-        ],
-        [
-            {"text": t["menu_lang"], "callback_data": "menu_lang", "style": "success"},
-            {"text": t["menu_rules"], "callback_data": "menu_rules", "style": "danger"}
-        ]
-    ]
-
-    if is_admin(user_id):
-        inline_keyboard.append([
-            {"text": t["menu_admin"], "callback_data": "menu_admin", "style": "primary"}
-        ])
-
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-        "reply_markup": json.dumps({"inline_keyboard": inline_keyboard})
-    }
-    try:
-        res = http_session.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload, timeout=10)
-        if res.status_code == 200:
-            return
-    except Exception as e:
-        print(f"Colored menu send warning: {e}")
-
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton(t["menu_products"], callback_data="menu_products"),
-        types.InlineKeyboardButton(t["menu_deposit"], callback_data="menu_deposit"),
-        types.InlineKeyboardButton(t["menu_support"], callback_data="menu_support"),
-        types.InlineKeyboardButton(t["menu_account"], callback_data="menu_account"),
-        types.InlineKeyboardButton(t["menu_lang"], callback_data="menu_lang"),
-        types.InlineKeyboardButton(t["menu_rules"], callback_data="menu_rules")
+    bot.send_message(
+        chat_id,
+        text,
+        parse_mode="HTML",
+        reply_markup=get_main_reply_keyboard(user_id)
     )
-    if is_admin(user_id):
-        markup.add(types.InlineKeyboardButton(t["menu_admin"], callback_data="menu_admin"))
-    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
 
 def get_main_menu_inline_back(user_id):
@@ -2049,7 +2015,7 @@ def handle_all_messages(message):
     t = LANG[lang_code]
     text = message.text if message.text else ""
 
-    # 1. Legacy ReplyKeyboard button handling
+    # 1. ReplyKeyboard button handling
     is_products = text in [LANG["en"]["menu_products"], LANG["zh"]["menu_products"], "🛍️ Products", "🛍️ 产品中心"]
     is_account = text in [LANG["en"]["menu_account"], LANG["zh"]["menu_account"]]
     is_deposit = text in [LANG["en"]["menu_deposit"], LANG["zh"]["menu_deposit"], "💰 Recharge", "💰 账户充值"]
@@ -2061,7 +2027,6 @@ def handle_all_messages(message):
     if any([is_products, is_account, is_deposit, is_support, is_lang, is_rules, is_admin_menu]):
         with state_lock:
             user_states.pop(user_id, None)
-        remove_old_reply_keyboard(message.chat.id)
 
         if is_lang:
             toggle_user_language(user_id)
@@ -2557,7 +2522,7 @@ def handle_inline_clicks(call):
     lang_code = get_lang(user_id)
     t = LANG[lang_code]
 
-    # Colored Main Menu Callbacks
+    # Main Menu Callbacks
     if call.data == "menu_products":
         bot.answer_callback_query(call.id)
         send_colored_countries_menu(call.message.chat.id, user_id, call.message.message_id)
