@@ -226,13 +226,19 @@ def format_country_display_name(country_key, raw_name, lang_code="en"):
     clean_en = strip_leading_flag(country_key)
     clean_raw = strip_leading_flag(raw_name if raw_name else country_key)
     if lang_code == "zh":
-        if clean_raw and clean_raw.lower() != clean_en.lower() and any('\u4e00' <= ch <= '\u9fff' for ch in clean_raw):
+        if clean_raw and any('\u4e00' <= ch <= '\u9fff' for ch in clean_raw):
             return clean_raw
         key_lower = clean_en.lower()
         if key_lower in COUNTRY_ZH_NAMES:
             return COUNTRY_ZH_NAMES[key_lower]
         for k, zh_val in COUNTRY_ZH_NAMES.items():
             if k in key_lower:
+                return zh_val
+        raw_lower = clean_raw.lower()
+        if raw_lower in COUNTRY_ZH_NAMES:
+            return COUNTRY_ZH_NAMES[raw_lower]
+        for k, zh_val in COUNTRY_ZH_NAMES.items():
+            if k in raw_lower:
                 return zh_val
         return clean_raw
     else:
@@ -475,6 +481,16 @@ def load_data_from_firebase():
         if inv and isinstance(inv, dict):
             if "Countries" in inv and "items" in inv["Countries"]:
                 for c_key, c_val in inv["Countries"]["items"].items():
+                    if "names" not in c_val or not isinstance(c_val["names"], dict):
+                        c_val["names"] = {
+                            "en": format_country_display_name(c_key, c_key, "en"),
+                            "zh": format_country_display_name(c_key, c_key, "zh")
+                        }
+                    else:
+                        c_val["names"].setdefault("en", format_country_display_name(c_key, c_key, "en"))
+                        c_val["names"]["zh"] = format_country_display_name(
+                            c_key, c_val["names"].get("zh", c_key), "zh"
+                        )
                     if "accounts" not in c_val or c_val["accounts"] is None:
                         c_val["accounts"] = []
                     if "zip_files" not in c_val or c_val["zip_files"] is None:
@@ -610,9 +626,9 @@ LANG = {
             "💙 <i>Wishing you smooth &amp; profitable business!</i>"
         ),
         "products": (
-            "✨ <b>AVAILABLE COUNTRIES & STOCK</b> ✨\n"
+            "✨ <b>AVAILABLE COUNTRIES &amp; STOCK</b> ✨\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🌍 Select a country below to view details & purchase:"
+            "🌍 Select a country below to view details &amp; purchase:"
         ),
         "account": (
             "╔══════════════════════╗\n"
@@ -623,7 +639,7 @@ LANG = {
             "💰 <b>Balance:</b> <code>${balance:.2f}</code>\n"
             "📦 <b>Purchased:</b> <code>{purchased_total}</code> pcs\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "✨ <i>Manage your balance & orders below:</i>"
+            "✨ <i>Manage your balance &amp; orders below:</i>"
         ),
         "deposit": (
             "╔══════════════════════╗\n"
@@ -832,7 +848,7 @@ LANG = {
             "╔══════════════════════╗\n"
             "   ✨ <b>@Session_Tdata_ShopBot</b>\n"
             "╚══════════════════════╝\n\n"
-            "💎 <i>您值得信赖的 Telegram 账号 (Session+Json/TData) 交易中心。</i>\n\n"
+            "💎 <i>您值得信赖的账号交易中心（支持 Session+Json / TData 格式）。</i>\n\n"
             "📦 <b>核心服务</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "🔹 <b>账号格式：</b> Session+Json / TData\n"
@@ -865,10 +881,10 @@ LANG = {
             "╔══════════════════════╗\n"
             "   👤 <b>个人中心 / 账户详情</b>\n"
             "╚══════════════════════╝\n\n"
-            "🆔 <b>用户 ID:</b> <code>{user_id}</code>\n"
-            "👤 <b>用户名:</b> {username}\n"
-            "💰 <b>当前余额:</b> <code>${balance:.2f}</code>\n"
-            "📦 <b>已购数量:</b> <code>{purchased_total}</code> 件\n"
+            "🆔 <b>用户编号：</b> <code>{user_id}</code>\n"
+            "👤 <b>用户名：</b> {username}\n"
+            "💰 <b>当前余额：</b> <code>${balance:.2f}</code>\n"
+            "📦 <b>已购数量：</b> <code>{purchased_total}</code> 件\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "✨ <i>在下方管理您的账户余额与订单：</i>"
         ),
@@ -895,23 +911,23 @@ LANG = {
             "3️⃣ <b>充值说明：</b> 充值金额一旦入账至您的余额，恕不退款。\n"
             "4️⃣ <b>准确转账：</b> 请务必在所选网络上转账准确的 USDT 金额。\n"
             "5️⃣ <b>全天客服：</b> 如有任何问题，请联系 {support_user}\n\n"
-            "🛡️ <b>注意事项 (PRECAUTIONS)</b>\n"
+            "🛡️ <b>安全注意事项</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "🔸 <i>仅限合法数字商品。</i>\n"
-            "🔸 <i>遵守当地法律及平台条款。</i>\n"
-            "🔸 <i>购买后请立即下载压缩包 (ZIP)。</i>\n"
+            "🔸 <i>遵守当地法律及平台规范。</i>\n"
+            "🔸 <i>购买后请立即下载压缩包。</i>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "✨ <i>感谢您遵守平台使用规范！</i>"
         ),
         "language": "🌐 语言已切换为中文！",
-        "admin": "🛠️ 欢迎来到管理面板\n\n在下方选择一个选项：",
-        "menu_products": "🛒 Products",
-        "menu_account": "👤 Personal Center",
-        "menu_deposit": "🪙 Recharge",
-        "menu_support": "📞 Contact Customer Service",
-        "menu_lang": "🌐 Language",
-        "menu_rules": "⚠️ Rules",
-        "menu_admin": "🛠️ Admin Panel",
+        "admin": "🛠️ 欢迎来到管理面板\n\n请在下方选择一个选项：",
+        "menu_products": "🛒 商品中心",
+        "menu_account": "👤 个人中心",
+        "menu_deposit": "🪙 余额充值",
+        "menu_support": "📞 联系客服",
+        "menu_lang": "🌐 语言设置",
+        "menu_rules": "⚠️ 平台规则",
+        "menu_admin": "🛠️ 管理面板",
         "select_qty": "🔢 选择数量：\n\n请选择您要购买的数量：",
         "select_country": "🌍 选择国家及电话区号：",
         "back": "< 返回",
@@ -926,9 +942,9 @@ LANG = {
             "╔══════════════════════╗\n"
             "   ⚠️ <b>商品库存不足</b>\n"
             "╚══════════════════════╝\n\n"
-            "📦 <b>当前可用库存:</b> <code>{stock}</code> 件\n"
+            "📦 <b>当前可用库存：</b> <code>{stock}</code> 件\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "😔 <i>抱歉，该国家当前库存不足或已售罄。</i>\n\n"
+            "😔 <i>抱歉，该国家当前库存不足或少于您请求的数量。</i>\n\n"
             "💡 <i>请选择其他国家或联系客服了解补货时间。</i>"
         ),
         "insufficient_balance": (
@@ -964,14 +980,14 @@ LANG = {
         ),
         "pay_trc20": "💵 USDT (TRC20)  •  最低 $3",
         "pay_bep20": "💵 USDT (BEP20)  •  最低 $3",
-        "send_txid_btn": "📤 发送订单号 / 交易单号 (TxID)",
+        "send_txid_btn": "📤 提交订单号 / 交易哈希",
         "txid_prompt": (
             "╔══════════════════════╗\n"
             "   📤 <b>提交付款凭证</b>\n"
             "╚══════════════════════╝\n\n"
             "📦 <b>订单编号：</b> <code>{order_id}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "✍️ <i>请发送您的付款<b>交易单号 (TxID)</b> 或<b>付款截图</b>：</i>"
+            "✍️ <i>请发送您的付款<b>交易哈希 / 单号</b>或<b>付款截图</b>：</i>"
         ),
         "proof_sent": (
             "╔══════════════════════╗\n"
@@ -986,7 +1002,7 @@ LANG = {
             "╔══════════════════════╗\n"
             "   🚫 <b>重复的交易单号 / 订单号</b>\n"
             "╚══════════════════════╝\n\n"
-            "❌ <i>此交易单号 (TxID) 或订单号已被使用！</i>\n"
+            "❌ <i>此交易单号或订单号已被使用！</i>\n"
             "🔒 <i>每个单号仅限使用一次。</i>"
         ),
         "country_detail": (
@@ -1014,7 +1030,7 @@ LANG = {
         "enter_custom_qty": "🔢 请输入您要购买的数量（例如：4、15）：",
         "invalid_qty_zero": "❌ 请输入大于 0 的有效数量：",
         "invalid_qty_num": "❌ 数字无效！请输入有效的整数（例如：2、5）：",
-        "product_not_found": "❌ 未找到该产品。",
+        "product_not_found": "❌ 未找到该商品。",
         "deliver_zip_caption": (
             "╔══════════════════════╗\n"
             "   ✅ <b>购买成功</b>\n"
@@ -1032,7 +1048,7 @@ LANG = {
             "   ✅ <b>购买成功</b>\n"
             "╚══════════════════════╝\n\n"
             "🌍 <b>国家：</b> {flag} <b>{name}</b>\n"
-            "📱 <b>电报号码：</b> <code>{num}</code>\n"
+            "📱 <b>账号号码：</b> <code>{num}</code>\n"
             "🔐 <b>二次验证码：</b> <code>{tfa}</code>\n"
             "💵 <b>实付金额：</b> <code>${price:.2f}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1070,7 +1086,7 @@ LANG = {
             "📍 <b>收款地址：</b> <code>{address}</code>\n"
             "🕒 <b>创建时间：</b> <code>{expires}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "⚠️ <i>请准确转账 <b>{send_val}</b>（包含所有小数位）。该金额按创建订单时的币安汇率由 <b>${amount:.2f}</b> 换算并带有唯一识别尾数；到账后将自动为您充值 <b>${amount:.2f}</b>。</i>\n\n"
+            "⚠️ <i>请准确转账 <b>{send_val}</b>（包含所有小数位）。该金额按创建订单时的汇率由 <b>${amount:.2f}</b> 换算并带有唯一识别尾数；到账后将为您充值 <b>${amount:.2f}</b>。</i>\n\n"
             "🔗 <i>请仅通过 <b>{network}</b> 网络转账原生资产/代币。</i>\n"
             "💎 <i>管理员验证通过后将立即为您增加账户余额。</i>"
         )
@@ -1850,7 +1866,7 @@ def send_colored_countries_menu(chat_id, user_id, message_id=None):
 def get_language_keyboard(user_id):
     t = LANG[get_lang(user_id)]
     current_lang = get_lang(user_id)
-    btn_text = "🇨🇳 切换到中文" if current_lang == "en" else "🇬🇧 切换为英文 (Switch to English)"
+    btn_text = "🇨🇳 切换到中文" if current_lang == "en" else "🇬🇧 切换为英文"
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(btn_text, callback_data="lang_toggle"))
     markup.add(types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu"))
@@ -1858,32 +1874,36 @@ def get_language_keyboard(user_id):
 
 
 def get_admin_panel_keyboard(user_id):
-    t = LANG[get_lang(user_id)]
+    lang_code = get_lang(user_id)
+    t = LANG[lang_code]
+    is_zh = lang_code == "zh"
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start"),
-        types.InlineKeyboardButton("👥 Management (Users & Balance)", callback_data="admin_management"),
-        types.InlineKeyboardButton("➕ Add New Country", callback_data="admin_add_country"),
-        types.InlineKeyboardButton("🗂️ Add Zip File Stock", callback_data="admin_add_zip_menu"),
-        types.InlineKeyboardButton("✏️ Edit / Delete Countries", callback_data="admin_edit_delete_countries_menu"),
-        types.InlineKeyboardButton("📞 Change Support Username", callback_data="admin_change_support"),
+        types.InlineKeyboardButton("📢 全员群发消息" if is_zh else "📢 Broadcast Message", callback_data="admin_broadcast_start"),
+        types.InlineKeyboardButton("👥 用户与余额管理" if is_zh else "👥 Management (Users & Balance)", callback_data="admin_management"),
+        types.InlineKeyboardButton("➕ 添加新国家" if is_zh else "➕ Add New Country", callback_data="admin_add_country"),
+        types.InlineKeyboardButton("🗂️ 上传压缩包库存" if is_zh else "🗂️ Add Zip File Stock", callback_data="admin_add_zip_menu"),
+        types.InlineKeyboardButton("✏️ 编辑 / 删除国家" if is_zh else "✏️ Edit / Delete Countries", callback_data="admin_edit_delete_countries_menu"),
+        types.InlineKeyboardButton("📞 修改客服账号" if is_zh else "📞 Change Support Username", callback_data="admin_change_support"),
         types.InlineKeyboardButton(t["main_menu"], callback_data="go_main_menu")
     )
     return markup
 
 
 def get_management_keyboard(user_id):
+    is_zh = get_lang(user_id) == "zh"
     markup = types.InlineKeyboardMarkup(row_width=1)
     with state_lock:
         total_users = len(all_users)
-    markup.add(types.InlineKeyboardButton(f"👥 All Users List ({total_users})", callback_data="mgmt_users_0"))
-    markup.add(types.InlineKeyboardButton("🔍 Search User by ID", callback_data="mgmt_search_user"))
-    markup.add(types.InlineKeyboardButton("💰 Top Balance Users", callback_data="mgmt_top_balance"))
-    markup.add(types.InlineKeyboardButton("🛠️ Back to Admin Panel", callback_data="admin_back"))
+    markup.add(types.InlineKeyboardButton(f"👥 全部用户列表 ({total_users})" if is_zh else f"👥 All Users List ({total_users})", callback_data="mgmt_users_0"))
+    markup.add(types.InlineKeyboardButton("🔍 按用户编号搜索" if is_zh else "🔍 Search User by ID", callback_data="mgmt_search_user"))
+    markup.add(types.InlineKeyboardButton("💰 余额排行榜" if is_zh else "💰 Top Balance Users", callback_data="mgmt_top_balance"))
+    markup.add(types.InlineKeyboardButton("🛠️ 返回管理面板" if is_zh else "🛠️ Back to Admin Panel", callback_data="admin_back"))
     return markup
 
 
-def get_users_list_keyboard(page=0, per_page=10):
+def get_users_list_keyboard(page=0, per_page=10, lang_code="en"):
+    is_zh = lang_code == "zh"
     markup = types.InlineKeyboardMarkup(row_width=1)
     with state_lock:
         users_sorted = sorted(list(all_users), reverse=True)
@@ -1899,39 +1919,57 @@ def get_users_list_keyboard(page=0, per_page=10):
         markup.add(types.InlineKeyboardButton(f"👤 {uid}{crown} | 💰 ${bal:.2f}", callback_data=f"mgmt_user_{uid}"))
     nav = []
     if page > 0:
-        nav.append(types.InlineKeyboardButton("⬅️ Prev", callback_data=f"mgmt_users_{page-1}"))
+        nav.append(types.InlineKeyboardButton("⬅️ 上一页" if is_zh else "⬅️ Prev", callback_data=f"mgmt_users_{page-1}"))
     if page < total_pages - 1:
-        nav.append(types.InlineKeyboardButton("Next ➡️", callback_data=f"mgmt_users_{page+1}"))
+        nav.append(types.InlineKeyboardButton("下一页 ➡️" if is_zh else "Next ➡️", callback_data=f"mgmt_users_{page+1}"))
     if nav:
         markup.add(*nav)
-    markup.add(types.InlineKeyboardButton(f"📄 Page {page+1}/{total_pages} | Total: {total}", callback_data="noop"))
-    markup.add(types.InlineKeyboardButton("🔙 Back to Management", callback_data="admin_management"))
+    page_lbl = f"📄 第 {page+1}/{total_pages} 页 | 共 {total} 人" if is_zh else f"📄 Page {page+1}/{total_pages} | Total: {total}"
+    back_lbl = "🔙 返回用户管理" if is_zh else "🔙 Back to Management"
+    markup.add(types.InlineKeyboardButton(page_lbl, callback_data="noop"))
+    markup.add(types.InlineKeyboardButton(back_lbl, callback_data="admin_management"))
     return markup, total_pages, total
 
 
-def get_user_detail_keyboard(target_uid):
+def get_user_detail_keyboard(target_uid, lang_code="en"):
+    is_zh = lang_code == "zh"
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("➕ Add Balance", callback_data=f"mgmt_bal_add_{target_uid}"),
-        types.InlineKeyboardButton("➖ Subtract Balance", callback_data=f"mgmt_bal_sub_{target_uid}"),
-        types.InlineKeyboardButton("✏️ Set Balance", callback_data=f"mgmt_bal_set_{target_uid}"),
-        types.InlineKeyboardButton("🔄 Reset to $0", callback_data=f"mgmt_bal_reset_{target_uid}"),
+        types.InlineKeyboardButton("➕ 增加余额" if is_zh else "➕ Add Balance", callback_data=f"mgmt_bal_add_{target_uid}"),
+        types.InlineKeyboardButton("➖ 扣减余额" if is_zh else "➖ Subtract Balance", callback_data=f"mgmt_bal_sub_{target_uid}"),
+        types.InlineKeyboardButton("✏️ 设置余额" if is_zh else "✏️ Set Balance", callback_data=f"mgmt_bal_set_{target_uid}"),
+        types.InlineKeyboardButton("🔄 重置为 $0" if is_zh else "🔄 Reset to $0", callback_data=f"mgmt_bal_reset_{target_uid}"),
     )
     markup.add(
-        types.InlineKeyboardButton("📦 Purchase History", callback_data=f"mgmt_hist_pur_{target_uid}"),
-        types.InlineKeyboardButton("💰 Deposit History", callback_data=f"mgmt_hist_dep_{target_uid}"),
+        types.InlineKeyboardButton("📦 购买记录" if is_zh else "📦 Purchase History", callback_data=f"mgmt_hist_pur_{target_uid}"),
+        types.InlineKeyboardButton("💰 充值记录" if is_zh else "💰 Deposit History", callback_data=f"mgmt_hist_dep_{target_uid}"),
     )
-    markup.add(types.InlineKeyboardButton("🔙 Back to Users List", callback_data="mgmt_users_0"))
-    markup.add(types.InlineKeyboardButton("🛠️ Back to Admin Panel", callback_data="admin_back"))
+    markup.add(types.InlineKeyboardButton("🔙 返回用户列表" if is_zh else "🔙 Back to Users List", callback_data="mgmt_users_0"))
+    markup.add(types.InlineKeyboardButton("🛠️ 返回管理面板" if is_zh else "🛠️ Back to Admin Panel", callback_data="admin_back"))
     return markup
 
 
-def get_user_detail_text(target_uid):
+def get_user_detail_text(target_uid, lang_code="en"):
     with state_lock:
         bal = user_balances.get(int(target_uid), 0.0)
         pur = list(user_purchases.get(int(target_uid), []))
         dep = list(user_deposits.get(int(target_uid), []))
         lang = user_languages.get(int(target_uid), "en")
+    if lang_code == "zh":
+        is_adm = "是 👑" if is_admin(target_uid) else "否"
+        lang_disp = "中文" if lang == "zh" else "英文"
+        return (
+            f"👤 用户管理详情\n"
+            f"──────────────────────\n"
+            f"🆔 用户编号：{target_uid}\n"
+            f"💰 当前余额：${bal:.2f}\n"
+            f"🌐 语言设置：{lang_disp}\n"
+            f"👑 管理员：{is_adm}\n"
+            f"📦 购买次数：{len(pur)}\n"
+            f"💰 充值次数：{len(dep)}\n"
+            f"──────────────────────\n"
+            f"请选择余额操作选项："
+        )
     is_adm = "Yes 👑" if is_admin(target_uid) else "No"
     return (
         f"👤 User Management\n"
@@ -1968,11 +2006,12 @@ def _run_broadcast_worker(admin_chat_id, source_message_id, target_uids):
         if (idx + 1) % 20 == 0:
             time.sleep(0.2)
 
-    send_colored_main_menu_back(
-        admin_chat_id,
-        f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users",
-        admin_chat_id
+    done_msg = (
+        f"✅ 群发已完成！\n\n👥 发送成功：{success_count} 位用户\n❌ 发送失败（已屏蔽机器人）：{fail_count} 位用户"
+        if get_lang(admin_chat_id) == "zh"
+        else f"✅ Broadcast Completed!\n\n👥 Successfully sent: {success_count} users\n❌ Failed (Blocked bot): {fail_count} users"
     )
+    send_colored_main_menu_back(admin_chat_id, done_msg, admin_chat_id)
 
 
 @bot.message_handler(commands=['start'])
@@ -1998,13 +2037,14 @@ def stock_command(message):
 @bot.message_handler(commands=['admin'])
 def admin_command(message):
     user_id = message.from_user.id
+    is_zh = get_lang(user_id) == "zh"
     if not is_admin(user_id):
-        msg = "❌ 您无权访问管理面板。" if get_lang(user_id) == "zh" else "❌ You are not authorized to use the admin panel."
+        msg = "❌ 您无权访问管理面板。" if is_zh else "❌ You are not authorized to use the admin panel."
         bot.send_message(message.chat.id, msg)
         return
     with state_lock:
         user_states[user_id] = "waiting_for_admin_password"
-    bot.send_message(message.chat.id, "🔐 Please enter the Admin Panel password:")
+    bot.send_message(message.chat.id, "🔐 请输入管理面板密码：" if is_zh else "🔐 Please enter the Admin Panel password:")
 
 
 @bot.message_handler(commands=['cancel'])
@@ -2019,6 +2059,7 @@ def cancel_operation(message):
 @bot.message_handler(content_types=['document'])
 def handle_document_uploads(message):
     user_id = message.from_user.id
+    is_zh = get_lang(user_id) == "zh"
     with state_lock:
         current_state = user_states.get(user_id)
         country_name = temp_admin_data.get(user_id)
@@ -2030,18 +2071,21 @@ def handle_document_uploads(message):
                 file_info = bot.get_file(message.document.file_id)
                 downloaded_file = bot.download_file(file_info.file_path)
             except Exception as e:
-                bot.send_message(message.chat.id, f"❌ Failed to download ZIP file: {str(e)}")
+                err_txt = f"❌ 下载压缩包失败：{str(e)}" if is_zh else f"❌ Failed to download ZIP file: {str(e)}"
+                bot.send_message(message.chat.id, err_txt)
                 return
             with state_lock:
                 temp_admin_data[f"zip_bytes_{user_id}"] = downloaded_file
                 user_states[user_id] = "waiting_for_zip_2fa"
+            disp_c = format_country_display_name(country_name, items_map[country_name].get("names", {}).get("zh" if is_zh else "en", country_name), "zh" if is_zh else "en")
             response_msg = (
-                f"✅ ZIP File uploaded successfully for {country_name}!\n\n"
-                f"🔐 Now, please send the Password / 2FA Code for this ZIP file so it can be verified and read properly:"
+                f"✅ {disp_c} 的压缩包已上传成功！\n\n🔐 现在请输入该压缩包的密码 / 二次验证码："
+                if is_zh
+                else f"✅ ZIP File uploaded successfully for {disp_c}!\n\n🔐 Now, please send the Password / 2FA Code for this ZIP file so it can be verified and read properly:"
             )
             bot.send_message(message.chat.id, response_msg)
         else:
-            bot.send_message(message.chat.id, "❌ Invalid country selected.")
+            bot.send_message(message.chat.id, "❌ 选择的国家无效。" if is_zh else "❌ Invalid country selected.")
             with state_lock:
                 user_states.pop(user_id, None)
         return
@@ -2056,6 +2100,7 @@ def handle_all_messages(message):
     ensure_user_registered(user_id)
 
     lang_code = get_lang(user_id)
+    is_zh = lang_code == "zh"
     t = LANG[lang_code]
     text = message.text if message.text else ""
 
@@ -2080,11 +2125,11 @@ def handle_all_messages(message):
             return
         elif is_admin_menu:
             if not is_admin(user_id):
-                bot.send_message(message.chat.id, "❌ 无权访问。" if lang_code == "zh" else "❌ Unauthorized.")
+                bot.send_message(message.chat.id, "❌ 无权访问。" if is_zh else "❌ Unauthorized.")
                 return
             with state_lock:
                 user_states[user_id] = "waiting_for_admin_password"
-            bot.send_message(message.chat.id, "🔐 Please enter the Admin Panel password:")
+            bot.send_message(message.chat.id, "🔐 请输入管理面板密码：" if is_zh else "🔐 Please enter the Admin Panel password:")
             return
         elif is_products:
             send_colored_countries_menu(message.chat.id, user_id)
@@ -2113,14 +2158,15 @@ def handle_all_messages(message):
         if text.strip() == ADMIN_PASSWORD:
             with state_lock:
                 user_states.pop(user_id, None)
-            bot.send_message(message.chat.id, "🛠️ Welcome to Admin Panel\n\nChoose an option below:", reply_markup=get_admin_panel_keyboard(user_id))
+            bot.send_message(message.chat.id, t["admin"], reply_markup=get_admin_panel_keyboard(user_id))
         else:
-            bot.send_message(message.chat.id, "❌ Incorrect password! Please enter the Admin Panel password again (or send /cancel):")
+            err_pw = "❌ 密码错误！请重新输入管理面板密码（或发送 /cancel）：" if is_zh else "❌ Incorrect password! Please enter the Admin Panel password again (or send /cancel):"
+            bot.send_message(message.chat.id, err_pw)
         return
 
     if state == "waiting_for_new_support_username" and is_admin(user_id):
         if not text:
-            bot.send_message(message.chat.id, "❌ Please enter a valid username:")
+            bot.send_message(message.chat.id, "❌ 请输入有效的用户名：" if is_zh else "❌ Please enter a valid username:")
             return
         new_support = text.strip()
         if not new_support.startswith("@"):
@@ -2129,11 +2175,8 @@ def handle_all_messages(message):
             support_admin_username = new_support
             user_states.pop(user_id, None)
         submit_bg(save_support)
-        bot.send_message(
-            message.chat.id,
-            f"✅ Support admin username successfully updated to: {support_admin_username}",
-            reply_markup=get_admin_panel_keyboard(user_id)
-        )
+        upd_sup = f"✅ 客服账号已更新为：{support_admin_username}" if is_zh else f"✅ Support admin username successfully updated to: {support_admin_username}"
+        bot.send_message(message.chat.id, upd_sup, reply_markup=get_admin_panel_keyboard(user_id))
         return
 
     if state == "waiting_for_mgmt_search" and is_admin(user_id):
@@ -2142,10 +2185,11 @@ def handle_all_messages(message):
         try:
             target = int(text.strip())
         except Exception:
-            bot.send_message(message.chat.id, "❌ Invalid User ID! Please enter numbers only (e.g., 123456789):", reply_markup=get_admin_panel_keyboard(user_id))
+            inv_uid = "❌ 用户编号无效！请仅输入数字（例如：123456789）：" if is_zh else "❌ Invalid User ID! Please enter numbers only (e.g., 123456789):"
+            bot.send_message(message.chat.id, inv_uid, reply_markup=get_admin_panel_keyboard(user_id))
             return
         ensure_user_registered(target)
-        bot.send_message(message.chat.id, get_user_detail_text(target), reply_markup=get_user_detail_keyboard(target))
+        bot.send_message(message.chat.id, get_user_detail_text(target, lang_code), reply_markup=get_user_detail_keyboard(target, lang_code))
         return
 
     if state.startswith("waiting_for_mgmt_bal_") and is_admin(user_id):
@@ -2159,30 +2203,32 @@ def handle_all_messages(message):
             if amount < 0:
                 raise ValueError()
         except Exception:
-            bot.send_message(message.chat.id, "❌ Invalid amount! Please enter a positive number (e.g., 10 or 5.50):")
+            inv_amt = "❌ 金额无效！请输入正数（例如：10 或 5.50）：" if is_zh else "❌ Invalid amount! Please enter a positive number (e.g., 10 or 5.50):"
+            bot.send_message(message.chat.id, inv_amt)
             return
         with state_lock:
             old_bal = user_balances.get(target_uid, 0.0)
             if action == "add":
                 new_bal = old_bal + amount
-                msg_action = f"➕ Added ${amount:.2f}"
+                msg_action = f"➕ 增加 ${amount:.2f}" if is_zh else f"➕ Added ${amount:.2f}"
             elif action == "sub":
                 new_bal = max(0.0, old_bal - amount)
-                msg_action = f"➖ Subtracted ${amount:.2f}"
+                msg_action = f"➖ 扣减 ${amount:.2f}" if is_zh else f"➖ Subtracted ${amount:.2f}"
             elif action == "set":
                 new_bal = amount
-                msg_action = f"✏️ Set to ${amount:.2f}"
+                msg_action = f"✏️ 设为 ${amount:.2f}" if is_zh else f"✏️ Set to ${amount:.2f}"
             else:
                 return
             new_bal = round(new_bal, 2)
             user_balances[target_uid] = new_bal
             user_states.pop(user_id, None)
         submit_bg(save_user_data, target_uid)
-        bot.send_message(
-            message.chat.id,
-            f"✅ Balance Updated!\n\n👤 User ID: {target_uid}\n{msg_action}\n💰 Old Balance: ${old_bal:.2f}\n💰 New Balance: ${new_bal:.2f}",
-            reply_markup=get_user_detail_keyboard(target_uid)
+        upd_bal_txt = (
+            f"✅ 余额已更新！\n\n👤 用户编号：{target_uid}\n{msg_action}\n💰 原余额：${old_bal:.2f}\n💰 新余额：${new_bal:.2f}"
+            if is_zh
+            else f"✅ Balance Updated!\n\n👤 User ID: {target_uid}\n{msg_action}\n💰 Old Balance: ${old_bal:.2f}\n💰 New Balance: ${new_bal:.2f}"
         )
+        bot.send_message(message.chat.id, upd_bal_txt, reply_markup=get_user_detail_keyboard(target_uid, lang_code))
         try:
             target_lang = get_lang(target_uid)
             notify_txt = (
@@ -2197,7 +2243,7 @@ def handle_all_messages(message):
 
     if state == "waiting_for_new_country" and is_admin(user_id):
         if not text:
-            bot.send_message(message.chat.id, "❌ Please enter a country name:")
+            bot.send_message(message.chat.id, "❌ 请输入国家名称：" if is_zh else "❌ Please enter a country name:")
             return
         c_name = strip_leading_flag(text.strip()).capitalize()
         with state_lock:
@@ -2208,9 +2254,12 @@ def handle_all_messages(message):
             else:
                 user_states.pop(user_id, None)
         if not exists:
-            bot.send_message(message.chat.id, f"📱 Now enter country phone code for {c_name} (e.g., +880):")
+            zh_c = format_country_display_name(c_name, c_name, "zh")
+            prompt_code = f"📱 请输入 {zh_c} 的国家区号（例如：+880）：" if is_zh else f"📱 Now enter country phone code for {c_name} (e.g., +880):"
+            bot.send_message(message.chat.id, prompt_code)
         else:
-            bot.send_message(message.chat.id, f"⚠️ Country {c_name} already exists.")
+            ex_msg = f"⚠️ 国家 {c_name} 已存在。" if is_zh else f"⚠️ Country {c_name} already exists."
+            bot.send_message(message.chat.id, ex_msg)
         return
 
     if state == "waiting_for_country_code" and is_admin(user_id):
@@ -2230,7 +2279,9 @@ def handle_all_messages(message):
         if c_name and c_code:
             submit_bg(save_inventory)
             flag = get_country_flag(c_name, c_code)
-            bot.send_message(message.chat.id, f"✅ Country {flag} {c_name} ({c_code}) added successfully!", reply_markup=get_admin_panel_keyboard(user_id))
+            disp_c = format_country_display_name(c_name, c_name, "zh" if is_zh else "en")
+            add_ok = f"✅ 已成功添加国家 {flag} {disp_c} ({c_code})！" if is_zh else f"✅ Country {flag} {disp_c} ({c_code}) added successfully!"
+            bot.send_message(message.chat.id, add_ok, reply_markup=get_admin_panel_keyboard(user_id))
         return
 
     if state.startswith("waiting_for_edit_price_") and is_admin(user_id):
@@ -2246,11 +2297,14 @@ def handle_all_messages(message):
                 user_states.pop(user_id, None)
             if found:
                 submit_bg(save_inventory)
-                bot.send_message(message.chat.id, f"✅ Price for {country_name} successfully updated to ${new_price:.2f}!", reply_markup=get_admin_panel_keyboard(user_id))
+                disp_c = format_country_display_name(country_name, country_name, "zh" if is_zh else "en")
+                p_ok = f"✅ {disp_c} 的价格已更新为 ${new_price:.2f}！" if is_zh else f"✅ Price for {disp_c} successfully updated to ${new_price:.2f}!"
+                bot.send_message(message.chat.id, p_ok, reply_markup=get_admin_panel_keyboard(user_id))
             else:
-                bot.send_message(message.chat.id, "❌ Country not found.")
+                bot.send_message(message.chat.id, "❌ 未找到该国家。" if is_zh else "❌ Country not found.")
         except ValueError:
-            bot.send_message(message.chat.id, "❌ Invalid price! Please enter a valid number (e.g., 1.50 or 2):")
+            inv_p = "❌ 价格无效！请输入有效数字（例如：1.50 或 2）：" if is_zh else "❌ Invalid price! Please enter a valid number (e.g., 1.50 or 2):"
+            bot.send_message(message.chat.id, inv_p)
             with state_lock:
                 user_states.pop(user_id, None)
         return
@@ -2261,17 +2315,17 @@ def handle_all_messages(message):
         with state_lock:
             proto_items = product_inventory["Countries"]["items"]
             if new_country in proto_items:
-                msg = f"⚠️ Country {new_country} already exists!"
+                msg = f"⚠️ 国家 {new_country} 已存在！" if is_zh else f"⚠️ Country {new_country} already exists!"
                 should_save = False
             elif old_country in proto_items:
                 proto_items[new_country] = proto_items.pop(old_country)
                 if "names" in proto_items[new_country]:
                     proto_items[new_country]["names"]["en"] = new_country
                     proto_items[new_country]["names"]["zh"] = format_country_display_name(new_country, new_country, "zh")
-                msg = f"✅ Successfully renamed country {old_country} to {new_country}!"
+                msg = f"✅ 已将国家 {old_country} 重命名为 {new_country}！" if is_zh else f"✅ Successfully renamed country {old_country} to {new_country}!"
                 should_save = True
             else:
-                msg = "❌ Country not found."
+                msg = "❌ 未找到该国家。" if is_zh else "❌ Country not found."
                 should_save = False
             user_states.pop(user_id, None)
         if should_save:
@@ -2283,7 +2337,8 @@ def handle_all_messages(message):
         with state_lock:
             user_states.pop(user_id, None)
             target_uids = list(all_users)
-        bot.send_message(message.chat.id, f"⏳ Broadcasting message to {len(target_uids)} users in background...")
+        bc_start = f"⏳ 正在后台向 {len(target_uids)} 位用户群发消息..." if is_zh else f"⏳ Broadcasting message to {len(target_uids)} users in background..."
+        bot.send_message(message.chat.id, bc_start)
         threading.Thread(
             target=_run_broadcast_worker,
             args=(message.chat.id, message.message_id, target_uids),
@@ -2299,13 +2354,15 @@ def handle_all_messages(message):
             user_states.pop(user_id, None)
         if country_name and raw_zip_bytes and tfa_code:
             zip_bytes = io.BytesIO(raw_zip_bytes)
+            disp_c = format_country_display_name(country_name, country_name, "zh" if is_zh else "en")
             try:
                 with pyzipper.AESZipFile(zip_bytes, 'r') as zf:
                     zf.setpassword(tfa_code.encode('utf-8'))
                     file_list = zf.namelist()
                     valid_files = [f for f in file_list if not f.endswith('/')]
                     if not valid_files:
-                        bot.send_message(message.chat.id, "❌ The ZIP archive contains no valid files.", reply_markup=get_admin_panel_keyboard(user_id))
+                        empty_z = "❌ 压缩包内没有有效文件。" if is_zh else "❌ The ZIP archive contains no valid files."
+                        bot.send_message(message.chat.id, empty_z, reply_markup=get_admin_panel_keyboard(user_id))
                     else:
                         zip_b64 = base64.b64encode(raw_zip_bytes).decode('utf-8')
                         with state_lock:
@@ -2318,11 +2375,22 @@ def handle_all_messages(message):
                             })
                         saved = save_inventory()
                         if saved:
-                            bot.send_message(message.chat.id, f"✅ Successfully added & saved ZIP stock for {country_name}!\n📁 Total valid files: {len(valid_files)}\n🔐 Password / 2FA: {tfa_code}", reply_markup=get_admin_panel_keyboard(user_id))
+                            z_ok = (
+                                f"✅ 已成功添加并保存 {disp_c} 的压缩包库存！\n📁 有效文件数：{len(valid_files)}\n🔐 密码 / 二次验证：{tfa_code}"
+                                if is_zh
+                                else f"✅ Successfully added & saved ZIP stock for {disp_c}!\n📁 Total valid files: {len(valid_files)}\n🔐 Password / 2FA: {tfa_code}"
+                            )
+                            bot.send_message(message.chat.id, z_ok, reply_markup=get_admin_panel_keyboard(user_id))
                         else:
-                            bot.send_message(message.chat.id, "⚠️ Stock added in memory but failed to save to Firebase! Check file size or Firebase permissions.", reply_markup=get_admin_panel_keyboard(user_id))
+                            z_warn = (
+                                "⚠️ 库存已加入内存，但保存到数据库失败！请检查文件大小或数据库权限。"
+                                if is_zh
+                                else "⚠️ Stock added in memory but failed to save to Firebase! Check file size or Firebase permissions."
+                            )
+                            bot.send_message(message.chat.id, z_warn, reply_markup=get_admin_panel_keyboard(user_id))
             except Exception as e:
-                bot.send_message(message.chat.id, f"❌ Password Error!\nError details: {str(e)}", reply_markup=get_admin_panel_keyboard(user_id))
+                pw_err = f"❌ 密码错误！\n错误详情：{str(e)}" if is_zh else f"❌ Password Error!\nError details: {str(e)}"
+                bot.send_message(message.chat.id, pw_err, reply_markup=get_admin_panel_keyboard(user_id))
         return
 
     # 3. User Input States
@@ -2564,6 +2632,7 @@ def handle_inline_clicks(call):
     ensure_user_registered(user_id)
 
     lang_code = get_lang(user_id)
+    is_zh = lang_code == "zh"
     t = LANG[lang_code]
 
     # Main Menu Callbacks
@@ -2614,12 +2683,12 @@ def handle_inline_clicks(call):
 
     if call.data == "menu_admin":
         if not is_admin(user_id):
-            bot.answer_callback_query(call.id, "Unauthorized", show_alert=True)
+            bot.answer_callback_query(call.id, "无权访问" if is_zh else "Unauthorized", show_alert=True)
             return
         bot.answer_callback_query(call.id)
         with state_lock:
             user_states[user_id] = "waiting_for_admin_password"
-        bot.send_message(call.message.chat.id, "🔐 Please enter the Admin Panel password:")
+        bot.send_message(call.message.chat.id, "🔐 请输入管理面板密码：" if is_zh else "🔐 Please enter the Admin Panel password:")
         return
 
     if call.data == "admin_change_support":
@@ -2627,20 +2696,21 @@ def handle_inline_clicks(call):
             return
         with state_lock:
             user_states[user_id] = "waiting_for_new_support_username"
-        bot.answer_callback_query(call.id, "Change Support Username")
+        bot.answer_callback_query(call.id, "修改客服账号" if is_zh else "Change Support Username")
         try:
-            bot.edit_message_text(
-                "📞 Change Support Username\n\nPlease send new support username (e.g., @YourUsername):",
-                call.message.chat.id,
-                call.message.message_id
+            sup_prompt = (
+                "📞 修改客服账号\n\n请输入新的客服用户名（例如：@YourUsername）："
+                if is_zh
+                else "📞 Change Support Username\n\nPlease send new support username (e.g., @YourUsername):"
             )
+            bot.edit_message_text(sup_prompt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
 
     if call.data.startswith("dep_accept_") or call.data.startswith("dep_reject_"):
         if not is_admin(user_id):
-            bot.answer_callback_query(call.id, "Unauthorized", show_alert=True)
+            bot.answer_callback_query(call.id, "无权访问" if is_zh else "Unauthorized", show_alert=True)
             return
 
         if call.data.startswith("dep_accept_"):
@@ -2676,9 +2746,14 @@ def handle_inline_clicks(call):
 
             if action == "accept":
                 submit_bg(save_user_data, target_uid)
-                bot.answer_callback_query(call.id, "Deposit Accepted & Credited!", show_alert=True)
+                bot.answer_callback_query(call.id, "充值已通过并入账！" if is_zh else "Deposit Accepted & Credited!", show_alert=True)
                 try:
-                    bot.edit_message_text(f"✅ Deposit Accepted!\nOrder ID: {order_id}\nCredited Amount: ${amount:.2f} to User {target_uid}", call.message.chat.id, call.message.message_id)
+                    acc_adm_txt = (
+                        f"✅ 充值已通过！\n订单编号：{order_id}\n已为用户 {target_uid} 入账：${amount:.2f}"
+                        if is_zh
+                        else f"✅ Deposit Accepted!\nOrder ID: {order_id}\nCredited Amount: ${amount:.2f} to User {target_uid}"
+                    )
+                    bot.edit_message_text(acc_adm_txt, call.message.chat.id, call.message.message_id)
                 except Exception:
                     pass
                 try:
@@ -2688,9 +2763,14 @@ def handle_inline_clicks(call):
                     pass
             else:
                 submit_bg(save_used_txids)
-                bot.answer_callback_query(call.id, "Deposit Rejected!", show_alert=True)
+                bot.answer_callback_query(call.id, "充值已拒绝！" if is_zh else "Deposit Rejected!", show_alert=True)
                 try:
-                    bot.edit_message_text(f"❌ Deposit Rejected!\nOrder ID: {order_id} for User {target_uid}", call.message.chat.id, call.message.message_id)
+                    rej_adm_txt = (
+                        f"❌ 充值已拒绝！\n订单编号：{order_id}（用户：{target_uid}）"
+                        if is_zh
+                        else f"❌ Deposit Rejected!\nOrder ID: {order_id} for User {target_uid}"
+                    )
+                    bot.edit_message_text(rej_adm_txt, call.message.chat.id, call.message.message_id)
                 except Exception:
                     pass
                 try:
@@ -2699,7 +2779,7 @@ def handle_inline_clicks(call):
                 except Exception:
                     pass
         else:
-            bot.answer_callback_query(call.id, "Request already processed or expired!", show_alert=True)
+            bot.answer_callback_query(call.id, "该申请已处理或已过期！" if is_zh else "Request already processed or expired!", show_alert=True)
         return
 
     if call.data.startswith("send_order_id_"):
@@ -2717,17 +2797,15 @@ def handle_inline_clicks(call):
 
     if call.data == "admin_management":
         if not is_admin(user_id):
-            bot.answer_callback_query(call.id, "Unauthorized", show_alert=True)
+            bot.answer_callback_query(call.id, "无权访问" if is_zh else "Unauthorized", show_alert=True)
             return
-        bot.answer_callback_query(call.id, "Management")
+        bot.answer_callback_query(call.id, "用户管理" if is_zh else "Management")
         with state_lock:
             total_users = len(all_users)
         text = (
-            f"👥 Management\n"
-            f"──────────────────────\n"
-            f"👥 Total Users: {total_users}\n"
-            f"──────────────────────\n"
-            f"Select option below:"
+            f"👥 用户与余额管理\n──────────────────────\n👥 总用户数：{total_users}\n──────────────────────\n请选择下方选项："
+            if is_zh
+            else f"👥 Management\n──────────────────────\n👥 Total Users: {total_users}\n──────────────────────\nSelect option below:"
         )
         try:
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=get_management_keyboard(user_id))
@@ -2742,9 +2820,13 @@ def handle_inline_clicks(call):
             page = int(call.data.replace("mgmt_users_", "", 1))
         except Exception:
             page = 0
-        bot.answer_callback_query(call.id, f"Page {page+1}")
-        markup, total_pages, total = get_users_list_keyboard(page)
-        text = f"👥 All Users List\n──────────────────────\nTotal Users: {total}\nClick a user to edit balance:"
+        bot.answer_callback_query(call.id, f"第 {page+1} 页" if is_zh else f"Page {page+1}")
+        markup, total_pages, total = get_users_list_keyboard(page, lang_code=lang_code)
+        text = (
+            f"👥 全部用户列表\n──────────────────────\n总用户数：{total}\n点击用户可编辑余额："
+            if is_zh
+            else f"👥 All Users List\n──────────────────────\nTotal Users: {total}\nClick a user to edit balance:"
+        )
         try:
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
@@ -2756,9 +2838,10 @@ def handle_inline_clicks(call):
             return
         with state_lock:
             user_states[user_id] = "waiting_for_mgmt_search"
-        bot.answer_callback_query(call.id, "Search User")
+        bot.answer_callback_query(call.id, "搜索用户" if is_zh else "Search User")
         try:
-            bot.edit_message_text("🔍 Search User\n\nPlease send User ID (e.g., 123456789):", call.message.chat.id, call.message.message_id)
+            s_txt = "🔍 搜索用户\n\n请输入用户编号（例如：123456789）：" if is_zh else "🔍 Search User\n\nPlease send User ID (e.g., 123456789):"
+            bot.edit_message_text(s_txt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -2766,7 +2849,7 @@ def handle_inline_clicks(call):
     if call.data == "mgmt_top_balance":
         if not is_admin(user_id):
             return
-        bot.answer_callback_query(call.id, "Top Balance")
+        bot.answer_callback_query(call.id, "余额排行" if is_zh else "Top Balance")
         with state_lock:
             top = sorted(all_users, key=lambda u: user_balances.get(int(u), 0.0), reverse=True)[:10]
             balances_copy = dict(user_balances)
@@ -2774,9 +2857,10 @@ def handle_inline_clicks(call):
         for uid in top:
             bal = balances_copy.get(int(uid), 0.0)
             markup.add(types.InlineKeyboardButton(f"👤 {uid} | 💰 ${bal:.2f}", callback_data=f"mgmt_user_{uid}"))
-        markup.add(types.InlineKeyboardButton("🔙 Back to Management", callback_data="admin_management"))
+        markup.add(types.InlineKeyboardButton("🔙 返回用户管理" if is_zh else "🔙 Back to Management", callback_data="admin_management"))
         try:
-            bot.edit_message_text("💰 Top 10 Balance Users:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+            top_hdr = "💰 余额前 10 用户：" if is_zh else "💰 Top 10 Balance Users:"
+            bot.edit_message_text(top_hdr, call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
             pass
         return
@@ -2788,11 +2872,11 @@ def handle_inline_clicks(call):
             target_uid = int(call.data.replace("mgmt_user_", "", 1))
         except Exception:
             return
-        bot.answer_callback_query(call.id, f"User {target_uid}")
+        bot.answer_callback_query(call.id, f"用户 {target_uid}" if is_zh else f"User {target_uid}")
         try:
-            bot.edit_message_text(get_user_detail_text(target_uid), call.message.chat.id, call.message.message_id, reply_markup=get_user_detail_keyboard(target_uid))
+            bot.edit_message_text(get_user_detail_text(target_uid, lang_code), call.message.chat.id, call.message.message_id, reply_markup=get_user_detail_keyboard(target_uid, lang_code))
         except Exception:
-            bot.send_message(call.message.chat.id, get_user_detail_text(target_uid), reply_markup=get_user_detail_keyboard(target_uid))
+            bot.send_message(call.message.chat.id, get_user_detail_text(target_uid, lang_code), reply_markup=get_user_detail_keyboard(target_uid, lang_code))
         return
 
     if call.data.startswith("mgmt_bal_add_") or call.data.startswith("mgmt_bal_sub_") or call.data.startswith("mgmt_bal_set_"):
@@ -2809,13 +2893,19 @@ def handle_inline_clicks(call):
         with state_lock:
             user_states[user_id] = f"waiting_for_mgmt_bal_{action}_{target_uid_int}"
             old_bal = user_balances.get(target_uid_int, 0.0)
-        label = {"add": "➕ Add Balance", "sub": "➖ Subtract Balance", "set": "✏️ Set Balance"}.get(action, "Balance")
+        label = (
+            {"add": "➕ 增加余额", "sub": "➖ 扣减余额", "set": "✏️ 设置余额"}.get(action, "余额操作")
+            if is_zh
+            else {"add": "➕ Add Balance", "sub": "➖ Subtract Balance", "set": "✏️ Set Balance"}.get(action, "Balance")
+        )
         bot.answer_callback_query(call.id, label)
         try:
-            bot.edit_message_text(
-                f"{label}\n\n👤 User ID: {target_uid_int}\n💰 Current Balance: ${old_bal:.2f}\n\nPlease send amount (e.g., 10):",
-                call.message.chat.id, call.message.message_id
+            bal_prompt = (
+                f"{label}\n\n👤 用户编号：{target_uid_int}\n💰 当前余额：${old_bal:.2f}\n\n请输入金额（例如：10）："
+                if is_zh
+                else f"{label}\n\n👤 User ID: {target_uid_int}\n💰 Current Balance: ${old_bal:.2f}\n\nPlease send amount (e.g., 10):"
             )
+            bot.edit_message_text(bal_prompt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -2831,12 +2921,14 @@ def handle_inline_clicks(call):
             old_bal = user_balances.get(target_uid, 0.0)
             user_balances[target_uid] = 0.0
         submit_bg(save_user_data, target_uid)
-        bot.answer_callback_query(call.id, "Balance Reset to $0", show_alert=True)
+        bot.answer_callback_query(call.id, "余额已重置为 $0" if is_zh else "Balance Reset to $0", show_alert=True)
         try:
-            bot.edit_message_text(
-                f"✅ Balance Reset!\n\n👤 User ID: {target_uid}\n💰 Old: ${old_bal:.2f} → New: $0.00",
-                call.message.chat.id, call.message.message_id, reply_markup=get_user_detail_keyboard(target_uid)
+            rst_adm = (
+                f"✅ 余额已重置！\n\n👤 用户编号：{target_uid}\n💰 原余额：${old_bal:.2f} → 新余额：$0.00"
+                if is_zh
+                else f"✅ Balance Reset!\n\n👤 User ID: {target_uid}\n💰 Old: ${old_bal:.2f} → New: $0.00"
             )
+            bot.edit_message_text(rst_adm, call.message.chat.id, call.message.message_id, reply_markup=get_user_detail_keyboard(target_uid, lang_code))
         except Exception:
             pass
         try:
@@ -2856,12 +2948,14 @@ def handle_inline_clicks(call):
             return
         with state_lock:
             pur = list(user_purchases.get(target_uid, []))
-        txt = "\n".join([p.get("text", "") if isinstance(p, dict) else str(p) for p in pur[-20:]]) or "No purchases yet."
-        bot.answer_callback_query(call.id, "Purchase History")
+        empty_p = "暂无购买记录。" if is_zh else "No purchases yet."
+        txt = "\n".join([p.get("text", "") if isinstance(p, dict) else str(p) for p in pur[-20:]]) or empty_p
+        bot.answer_callback_query(call.id, "购买记录" if is_zh else "Purchase History")
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔙 Back", callback_data=f"mgmt_user_{target_uid}"))
+        markup.add(types.InlineKeyboardButton("🔙 返回" if is_zh else "🔙 Back", callback_data=f"mgmt_user_{target_uid}"))
         try:
-            bot.edit_message_text(f"📦 Purchase History - {target_uid}\n──────────────────────\n{txt}", call.message.chat.id, call.message.message_id, reply_markup=markup)
+            pur_hdr = f"📦 购买记录 - {target_uid}\n──────────────────────\n{txt}" if is_zh else f"📦 Purchase History - {target_uid}\n──────────────────────\n{txt}"
+            bot.edit_message_text(pur_hdr, call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
             pass
         return
@@ -2875,12 +2969,14 @@ def handle_inline_clicks(call):
             return
         with state_lock:
             dep = list(user_deposits.get(target_uid, []))
-        txt = "\n".join([d.get("text", "") if isinstance(d, dict) else str(d) for d in dep[-20:]]) or "No deposits yet."
-        bot.answer_callback_query(call.id, "Deposit History")
+        empty_d = "暂无充值记录。" if is_zh else "No deposits yet."
+        txt = "\n".join([d.get("text", "") if isinstance(d, dict) else str(d) for d in dep[-20:]]) or empty_d
+        bot.answer_callback_query(call.id, "充值记录" if is_zh else "Deposit History")
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔙 Back", callback_data=f"mgmt_user_{target_uid}"))
+        markup.add(types.InlineKeyboardButton("🔙 返回" if is_zh else "🔙 Back", callback_data=f"mgmt_user_{target_uid}"))
         try:
-            bot.edit_message_text(f"💰 Deposit History - {target_uid}\n──────────────────────\n{txt}", call.message.chat.id, call.message.message_id, reply_markup=markup)
+            dep_hdr = f"💰 充值记录 - {target_uid}\n──────────────────────\n{txt}" if is_zh else f"💰 Deposit History - {target_uid}\n──────────────────────\n{txt}"
+            bot.edit_message_text(dep_hdr, call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
             pass
         return
@@ -2982,9 +3078,14 @@ def handle_inline_clicks(call):
             return
         with state_lock:
             user_states[user_id] = "waiting_for_broadcast_message"
-        bot.answer_callback_query(call.id, "Broadcast Mode")
+        bot.answer_callback_query(call.id, "群发模式" if is_zh else "Broadcast Mode")
         try:
-            bot.edit_message_text("📢 Broadcast System\n\nPlease send the message, photo, video or file that you want to send to all users:", call.message.chat.id, call.message.message_id)
+            bc_txt = (
+                "📢 全员群发系统\n\n请发送您想群发给所有用户的文字、图片、视频或文件："
+                if is_zh
+                else "📢 Broadcast System\n\nPlease send the message, photo, video or file that you want to send to all users:"
+            )
+            bot.edit_message_text(bc_txt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -2994,9 +3095,10 @@ def handle_inline_clicks(call):
             return
         with state_lock:
             user_states[user_id] = "waiting_for_new_country"
-        bot.answer_callback_query(call.id, "Add Country")
+        bot.answer_callback_query(call.id, "添加国家" if is_zh else "Add Country")
         try:
-            bot.edit_message_text("🌍 Enter new country name (e.g., Canada):", call.message.chat.id, call.message.message_id)
+            ac_txt = "🌍 请输入新国家名称（例如：Canada）：" if is_zh else "🌍 Enter new country name (e.g., Canada):"
+            bot.edit_message_text(ac_txt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -3010,16 +3112,17 @@ def handle_inline_clicks(call):
         if proto_items:
             for c_name, c_val in proto_items:
                 flag = get_country_flag(c_name, c_val.get("code", ""))
-                clean_c = format_country_display_name(c_name, c_name, "en")
+                clean_c = format_country_display_name(c_name, c_val.get("names", {}).get("zh" if is_zh else "en", c_name), "zh" if is_zh else "en")
                 markup.add(
-                    types.InlineKeyboardButton(f"💵 Edit Price: {flag} {clean_c}", callback_data=f"admin_edit_price_{c_name}"),
-                    types.InlineKeyboardButton(f"✏️ Rename: {flag} {clean_c}", callback_data=f"admin_rename_country_{c_name}"),
-                    types.InlineKeyboardButton(f"❌ Delete: {flag} {clean_c}", callback_data=f"admin_delete_country_{c_name}")
+                    types.InlineKeyboardButton(f"💵 修改价格：{flag} {clean_c}" if is_zh else f"💵 Edit Price: {flag} {clean_c}", callback_data=f"admin_edit_price_{c_name}"),
+                    types.InlineKeyboardButton(f"✏️ 重命名：{flag} {clean_c}" if is_zh else f"✏️ Rename: {flag} {clean_c}", callback_data=f"admin_rename_country_{c_name}"),
+                    types.InlineKeyboardButton(f"❌ 删除：{flag} {clean_c}" if is_zh else f"❌ Delete: {flag} {clean_c}", callback_data=f"admin_delete_country_{c_name}")
                 )
         markup.add(types.InlineKeyboardButton(t["back"], callback_data="admin_back"))
-        bot.answer_callback_query(call.id, "Countries Edit Menu")
+        bot.answer_callback_query(call.id, "国家管理" if is_zh else "Countries Edit Menu")
         try:
-            bot.edit_message_text("🌐 Manage Countries:\nSelect an option for a country below:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+            ed_hdr = "🌐 国家管理：\n请在下方选择要操作的国家功能：" if is_zh else "🌐 Manage Countries:\nSelect an option for a country below:"
+            bot.edit_message_text(ed_hdr, call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
             pass
         return
@@ -3030,10 +3133,17 @@ def handle_inline_clicks(call):
         country_name = call.data.replace("admin_edit_price_", "", 1)
         with state_lock:
             user_states[user_id] = f"waiting_for_edit_price_{country_name}"
-            current_price = product_inventory["Countries"]["items"].get(country_name, {}).get("price", 1.00)
-        bot.answer_callback_query(call.id, f"Edit Price {country_name}")
+            c_info = product_inventory["Countries"]["items"].get(country_name, {})
+            current_price = c_info.get("price", 1.00)
+            disp_c = format_country_display_name(country_name, c_info.get("names", {}).get("zh" if is_zh else "en", country_name), "zh" if is_zh else "en")
+        bot.answer_callback_query(call.id, f"修改价格 {disp_c}" if is_zh else f"Edit Price {disp_c}")
         try:
-            bot.edit_message_text(f"💵 Edit Price for {country_name}\n\nCurrent Price: ${current_price:.2f}\n\nPlease send new price (e.g., 1.50 or 2):", call.message.chat.id, call.message.message_id)
+            ep_txt = (
+                f"💵 修改 {disp_c} 的价格\n\n当前价格：${current_price:.2f}\n\n请输入新价格（例如：1.50 或 2）："
+                if is_zh
+                else f"💵 Edit Price for {disp_c}\n\nCurrent Price: ${current_price:.2f}\n\nPlease send new price (e.g., 1.50 or 2):"
+            )
+            bot.edit_message_text(ep_txt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -3044,9 +3154,12 @@ def handle_inline_clicks(call):
         country_name = call.data.replace("admin_rename_country_", "", 1)
         with state_lock:
             user_states[user_id] = f"waiting_for_rename_country_{country_name}"
-        bot.answer_callback_query(call.id, f"Rename {country_name}")
+            c_info = product_inventory["Countries"]["items"].get(country_name, {})
+            disp_c = format_country_display_name(country_name, c_info.get("names", {}).get("zh" if is_zh else "en", country_name), "zh" if is_zh else "en")
+        bot.answer_callback_query(call.id, f"重命名 {disp_c}" if is_zh else f"Rename {disp_c}")
         try:
-            bot.edit_message_text(f"✏️ Enter new name for country {country_name}:", call.message.chat.id, call.message.message_id)
+            rn_txt = f"✏️ 请输入 {disp_c} 的新名称：" if is_zh else f"✏️ Enter new name for country {disp_c}:"
+            bot.edit_message_text(rn_txt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -3064,23 +3177,28 @@ def handle_inline_clicks(call):
             remaining_items = list(proto_items.items())
         if deleted:
             submit_bg(save_inventory)
-            bot.answer_callback_query(call.id, f"Deleted {country_name}")
+            bot.answer_callback_query(call.id, f"已删除 {country_name}" if is_zh else f"Deleted {country_name}")
             markup = types.InlineKeyboardMarkup(row_width=1)
             for c, c_val in remaining_items:
                 flag = get_country_flag(c, c_val.get("code", ""))
-                clean_c = format_country_display_name(c, c, "en")
+                clean_c = format_country_display_name(c, c_val.get("names", {}).get("zh" if is_zh else "en", c), "zh" if is_zh else "en")
                 markup.add(
-                    types.InlineKeyboardButton(f"💵 Edit Price: {flag} {clean_c}", callback_data=f"admin_edit_price_{c}"),
-                    types.InlineKeyboardButton(f"✏️ Rename: {flag} {clean_c}", callback_data=f"admin_rename_country_{c}"),
-                    types.InlineKeyboardButton(f"❌ Delete: {flag} {clean_c}", callback_data=f"admin_delete_country_{c}")
+                    types.InlineKeyboardButton(f"💵 修改价格：{flag} {clean_c}" if is_zh else f"💵 Edit Price: {flag} {clean_c}", callback_data=f"admin_edit_price_{c}"),
+                    types.InlineKeyboardButton(f"✏️ 重命名：{flag} {clean_c}" if is_zh else f"✏️ Rename: {flag} {clean_c}", callback_data=f"admin_rename_country_{c}"),
+                    types.InlineKeyboardButton(f"❌ 删除：{flag} {clean_c}" if is_zh else f"❌ Delete: {flag} {clean_c}", callback_data=f"admin_delete_country_{c}")
                 )
             markup.add(types.InlineKeyboardButton(t["back"], callback_data="admin_back"))
             try:
-                bot.edit_message_text(f"✅ Country {country_name} deleted successfully!\n\n🌐 Manage Countries:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+                dl_txt = (
+                    f"✅ 已成功删除国家 {country_name}！\n\n🌐 国家管理："
+                    if is_zh
+                    else f"✅ Country {country_name} deleted successfully!\n\n🌐 Manage Countries:"
+                )
+                bot.edit_message_text(dl_txt, call.message.chat.id, call.message.message_id, reply_markup=markup)
             except Exception:
                 pass
         else:
-            bot.answer_callback_query(call.id, "Country not found", show_alert=True)
+            bot.answer_callback_query(call.id, "未找到该国家" if is_zh else "Country not found", show_alert=True)
         return
 
     elif call.data == "admin_add_zip_menu":
@@ -3091,12 +3209,13 @@ def handle_inline_clicks(call):
             items_snapshot = list(product_inventory["Countries"]["items"].items())
         for c, c_val in items_snapshot:
             flag = get_country_flag(c, c_val.get("code", ""))
-            clean_c = format_country_display_name(c, c, "en")
+            clean_c = format_country_display_name(c, c_val.get("names", {}).get("zh" if is_zh else "en", c), "zh" if is_zh else "en")
             markup.add(types.InlineKeyboardButton(f"🗂️ {flag} {clean_c}", callback_data=f"select_zip_country_{c}"))
         markup.add(types.InlineKeyboardButton(t["back"], callback_data="admin_back"))
-        bot.answer_callback_query(call.id, "ZIP Menu")
+        bot.answer_callback_query(call.id, "上传压缩包" if is_zh else "ZIP Menu")
         try:
-            bot.edit_message_text("Select country to upload ZIP file stock:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+            zm_txt = "请选择要上传压缩包库存的国家：" if is_zh else "Select country to upload ZIP file stock:"
+            bot.edit_message_text(zm_txt, call.message.chat.id, call.message.message_id, reply_markup=markup)
         except Exception:
             pass
         return
@@ -3108,9 +3227,12 @@ def handle_inline_clicks(call):
         with state_lock:
             temp_admin_data[user_id] = country_name
             user_states[user_id] = "waiting_for_zip_file"
-        bot.answer_callback_query(call.id, country_name)
+            c_info = product_inventory["Countries"]["items"].get(country_name, {})
+            disp_c = format_country_display_name(country_name, c_info.get("names", {}).get("zh" if is_zh else "en", country_name), "zh" if is_zh else "en")
+        bot.answer_callback_query(call.id, disp_c)
         try:
-            bot.edit_message_text(f"📁 Please send the .zip file for {country_name}:", call.message.chat.id, call.message.message_id)
+            sz_txt = f"📁 请发送 {disp_c} 的 .zip 压缩包文件：" if is_zh else f"📁 Please send the .zip file for {disp_c}:"
+            bot.edit_message_text(sz_txt, call.message.chat.id, call.message.message_id)
         except Exception:
             pass
         return
@@ -3119,7 +3241,7 @@ def handle_inline_clicks(call):
         if not is_admin(user_id):
             return
         try:
-            bot.edit_message_text("🛠️ Welcome to Admin Panel\n\nChoose an option below:", call.message.chat.id, call.message.message_id, reply_markup=get_admin_panel_keyboard(user_id))
+            bot.edit_message_text(t["admin"], call.message.chat.id, call.message.message_id, reply_markup=get_admin_panel_keyboard(user_id))
         except Exception:
             pass
         return
@@ -3165,14 +3287,14 @@ def handle_inline_clicks(call):
             send_val = f"{calculated_val:.3f} USDT"
             credit_val = f"${current_amount:.2f}"
             currency_type = "USDT · TRC20"
-            wallet_address = "TMDf93NV9zM5sAS9mXc5FWmRC5qLbwM4EV"
+            wallet_address = "TLvHfXADzmP8PBqoLWVBh6P7PrskMsGFKS"
             network_name = "Tron (TRC20)"
         else:
             calculated_val = current_amount * (10.076 / 10.0)
             send_val = f"{calculated_val:.3f} USDT"
             credit_val = f"${current_amount:.2f}"
             currency_type = "USDT · BEP20"
-            wallet_address = "0x4388fd8ff1278b4d9ddfc770875a731379a061b6"
+            wallet_address = "0x0d1EfB4513457Bc5f19B9066664cfaDeE4F27860"
             network_name = "BNB Smart Chain (BEP20)"
 
         with state_lock:
